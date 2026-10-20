@@ -87,6 +87,77 @@ app.get("/api/lockers/:lockerCode/slots", async (req, res) => {
   }
 });
 
+app.get("/api/lost-reports", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, item_name, description, lost_location,
+             lost_at, reporter_contact, status, created_at
+      FROM lost_reports
+      ORDER BY created_at DESC
+    `);
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Get lost reports failed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Không thể lấy danh sách báo mất đồ",
+    });
+  }
+});
+
+app.post("/api/lost-reports", async (req, res) => {
+  try {
+    const {
+      item_name,
+      description,
+      lost_location,
+      lost_at,
+      reporter_contact,
+    } = req.body;
+
+    if (
+      typeof item_name !== "string" ||
+      !item_name.trim() ||
+      typeof lost_location !== "string" ||
+      !lost_location.trim()
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Tên đồ vật và địa điểm mất là bắt buộc",
+      });
+      return;
+    }
+
+    const result = await pool.query(
+      `INSERT INTO lost_reports
+       (item_name, description, lost_location, lost_at, reporter_contact)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, item_name, description, lost_location,
+                 lost_at, reporter_contact, status, created_at`,
+      [
+        item_name.trim(),
+        description || null,
+        lost_location.trim(),
+        lost_at || null,
+        reporter_contact || null,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Đã ghi nhận báo cáo mất đồ",
+      data: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Create lost report failed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Không thể tạo báo cáo mất đồ",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Smart Locker API running at http://localhost:${PORT}`);
 });
