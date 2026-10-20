@@ -14,6 +14,9 @@ import {
   Tag,
   Typography,
   message,
+  Form,
+  Input,
+  Modal,
 } from 'antd';
 import {
   AppstoreOutlined,
@@ -26,6 +29,8 @@ import {
   InboxOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
+  FileAddOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import './App.css';
 
@@ -45,6 +50,17 @@ type Slot = {
   status: string;
 };
 
+type LostReport = {
+  id: number;
+  item_name: string;
+  description: string | null;
+  lost_location: string;
+  lost_at: string | null;
+  reporter_contact: string | null;
+  status: string;
+  created_at: string;
+};
+
 const API = 'http://localhost:3000/api';
 
 function App() {
@@ -52,26 +68,73 @@ function App() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(false);
   const [apiOnline, setApiOnline] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [reportForm] = Form.useForm();
+  const [lostReports, setLostReports] = useState<LostReport[]>([]);
+
+  const submitLostReport = async (values: {
+    item_name: string;
+    description?: string;
+    lost_location: string;
+    lost_at?: string;
+    reporter_contact?: string;
+  }) => {
+    setSubmitting(true);
+
+    try {
+      const response = await fetch(`${API}/lost-reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(values),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Không thể gửi báo cáo');
+      }
+
+      message.success('Đã gửi báo cáo mất đồ thành công!');
+      reportForm.resetFields();
+      setReportOpen(false);
+    } catch (error) {
+      console.error(error);
+      message.error('Gửi báo cáo thất bại. Hãy kiểm tra kết nối backend.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
 
     try {
-      const [lockerResponse, slotResponse] = await Promise.all([
+      const [lockerResponse, slotResponse, reportResponse] = await Promise.all([
         fetch(`${API}/lockers`),
         fetch(`${API}/lockers/L-001/slots`),
+        fetch(`${API}/lost-reports`),
       ]);
 
-      if (!lockerResponse.ok || !slotResponse.ok) {
+      if (
+        !lockerResponse.ok ||
+        !slotResponse.ok ||
+        !reportResponse.ok
+      ) {
         throw new Error('API trả về lỗi');
       }
 
       const lockerJson = await lockerResponse.json();
       const slotJson = await slotResponse.json();
+      const reportJson = await reportResponse.json();
 
       setLockers(lockerJson.data ?? []);
       setSlots(slotJson.data ?? []);
+      setLostReports(reportJson.data ?? []);
       setApiOnline(true);
+
     } catch (error) {
       console.error(error);
       setApiOnline(false);
@@ -180,13 +243,23 @@ function App() {
                   Theo dõi tủ thông minh và quản lý đồ thất lạc tại một nơi.
                 </Text>
               </div>
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={() => void loadData()}
-                loading={loading}
-              >
-                Làm mới dữ liệu
-              </Button>
+              <Space wrap>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={() => void loadData()}
+                  loading={loading}
+                >
+                  Làm mới dữ liệu
+                </Button>
+
+                <Button
+                  type="primary"
+                  icon={<FileAddOutlined />}
+                  onClick={() => setReportOpen(true)}
+                >
+                  Báo mất đồ
+                </Button>
+              </Space>
             </div>
 
             <div className="status-strip">
@@ -345,6 +418,69 @@ function App() {
                     )}
                   </Row>
                 </Card>
+                <Card
+                  className="section-card"
+                  title={
+                    <Space>
+                      <span className="section-title-icon">
+                        <InboxOutlined />
+                      </span>
+                      <span>Báo cáo mất đồ gần đây</span>
+                    </Space>
+                  }
+                  extra={<Tag color="blue">{lostReports.length} báo cáo</Tag>}
+                >
+                  {lostReports.length === 0 ? (
+                    <div className="empty-state">
+                      <InboxOutlined />
+                      <Text>Chưa có báo cáo mất đồ nào.</Text>
+                    </div>
+                  ) : (
+                    <div className="locker-list">
+                      {lostReports.map((report) => (
+                        <div className="locker-item" key={report.id}>
+                          <div className="locker-illustration">
+                            <SearchOutlined />
+                          </div>
+
+                          <div className="locker-details">
+                            <Text strong>{report.item_name}</Text>
+
+                            <Text type="secondary">
+                              <EnvironmentOutlined /> {report.lost_location}
+                            </Text>
+
+                            {report.description && (
+                              <Text type="secondary">
+                                {report.description}
+                              </Text>
+                            )}
+
+                            <Text className="locker-slot-count">
+                              Báo lúc: {new Date(report.created_at).toLocaleString('vi-VN')}
+                            </Text>
+                          </div>
+
+                          <Tag
+                            color={
+                              report.status === 'pending'
+                                ? 'processing'
+                                : report.status === 'matched'
+                                  ? 'success'
+                                  : 'default'
+                            }
+                          >
+                            {report.status === 'pending'
+                              ? 'Đang chờ'
+                              : report.status === 'matched'
+                                ? 'Đã ghép'
+                                : report.status}
+                          </Tag>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
               </Col>
 
               <Col xs={24} xl={9}>
@@ -418,6 +554,73 @@ function App() {
           </Content>
         </Layout>
       </Layout>
+      <Modal
+        title="Tạo báo cáo mất đồ"
+        open={reportOpen}
+        onCancel={() => setReportOpen(false)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Text type="secondary">
+          Cung cấp thông tin để quản trị viên đối chiếu với đồ vật được tìm thấy.
+        </Text>
+
+        <Form
+          form={reportForm}
+          layout="vertical"
+          onFinish={submitLostReport}
+          style={{ marginTop: 20 }}
+        >
+          <Form.Item
+            name="item_name"
+            label="Tên đồ vật"
+            rules={[{ required: true, message: 'Vui lòng nhập tên đồ vật' }]}
+          >
+            <Input placeholder="Ví dụ: Ví màu đen" />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label="Mô tả"
+          >
+            <Input.TextArea
+              rows={3}
+              placeholder="Đặc điểm nhận dạng của đồ vật..."
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="lost_location"
+            label="Địa điểm mất"
+            rules={[{ required: true, message: 'Vui lòng nhập địa điểm mất' }]}
+          >
+            <Input placeholder="Ví dụ: Phòng học A203" />
+          </Form.Item>
+
+          <Form.Item
+            name="lost_at"
+            label="Thời gian mất"
+          >
+            <Input type="datetime-local" />
+          </Form.Item>
+
+          <Form.Item
+            name="reporter_contact"
+            label="Thông tin liên hệ (không bắt buộc)"
+          >
+            <Input placeholder="Email hoặc số điện thoại" />
+          </Form.Item>
+
+          <Button
+            type="primary"
+            htmlType="submit"
+            block
+            loading={submitting}
+          >
+            Gửi báo cáo
+          </Button>
+        </Form>
+      </Modal>
     </AntApp>
   );
 }
