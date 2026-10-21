@@ -33,9 +33,14 @@ import {
   SearchOutlined,
   LogoutOutlined,
   LoginOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
+import { DepositItemModal } from './components/DepositItemModal';
+import { FoundItemsList } from './components/FoundItemsList';
+import { MyClaimsModal } from './components/MyClaimsModal';
+import { AdminClaimsDrawer } from './components/AdminClaimsDrawer';
 import './App.css';
 
 const { Header, Sider, Content } = Layout;
@@ -77,6 +82,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [apiOnline, setApiOnline] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [depositModalOpen, setDepositModalOpen] = useState(false);
+  const [myClaimsOpen, setMyClaimsOpen] = useState(false);
+  const [adminClaimsOpen, setAdminClaimsOpen] = useState(false);
+  const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [submitting, setSubmitting] = useState(false);
   const [reportForm] = Form.useForm();
   const [lostReports, setLostReports] = useState<LostReport[]>([]);
@@ -182,7 +191,8 @@ function App() {
           <Menu
             theme="dark"
             mode="inline"
-            selectedKeys={['dashboard']}
+            selectedKeys={[selectedMenu]}
+            onSelect={(e) => setSelectedMenu(e.key)}
             items={
               isAdmin
                 ? [
@@ -192,19 +202,19 @@ function App() {
                       label: 'Tổng quan hệ thống',
                     },
                     {
-                      key: 'lockers',
-                      icon: <AppstoreOutlined />,
-                      label: 'Quản lý tủ & Ngăn IoT',
+                      key: 'admin_claims',
+                      icon: <SafetyCertificateOutlined />,
+                      label: 'Xác minh nhận đồ',
+                    },
+                    {
+                      key: 'items',
+                      icon: <InboxOutlined />,
+                      label: 'Kho đồ trong tủ',
                     },
                     {
                       key: 'reports',
                       icon: <BoxPlotOutlined />,
                       label: 'Xử lý báo mất đồ',
-                    },
-                    {
-                      key: 'items',
-                      icon: <InboxOutlined />,
-                      label: 'Đồ tìm thấy trong tủ',
                     },
                   ]
                 : [
@@ -214,14 +224,19 @@ function App() {
                       label: 'Trang chủ FindBox',
                     },
                     {
-                      key: 'reports',
-                      icon: <SearchOutlined />,
-                      label: 'Tìm đồ & Báo mất',
-                    },
-                    {
                       key: 'items',
                       icon: <InboxOutlined />,
-                      label: 'Đồ tìm thấy gần đây',
+                      label: 'Tìm đồ thất lạc',
+                    },
+                    {
+                      key: 'my_claims',
+                      icon: <KeyOutlined />,
+                      label: 'Yêu cầu của tôi & Mở tủ',
+                    },
+                    {
+                      key: 'reports',
+                      icon: <SearchOutlined />,
+                      label: 'Báo mất đồ mới',
                     },
                   ]
             }
@@ -310,7 +325,16 @@ function App() {
                   onClick={() => void loadData()}
                   loading={loading}
                 >
-                  Làm mới dữ liệu
+                  Làm mới
+                </Button>
+
+                <Button
+                  type="primary"
+                  style={{ background: '#10b981', borderColor: '#10b981' }}
+                  icon={<InboxOutlined />}
+                  onClick={() => setDepositModalOpen(true)}
+                >
+                  Gửi đồ tìm thấy
                 </Button>
 
                 <Button
@@ -320,6 +344,25 @@ function App() {
                 >
                   Báo mất đồ
                 </Button>
+
+                {isAuthenticated && (
+                  <Button
+                    icon={<KeyOutlined />}
+                    onClick={() => setMyClaimsOpen(true)}
+                  >
+                    Yêu cầu của tôi & Mở tủ
+                  </Button>
+                )}
+
+                {isAdmin && (
+                  <Button
+                    type="dashed"
+                    icon={<SafetyCertificateOutlined />}
+                    onClick={() => setAdminClaimsOpen(true)}
+                  >
+                    Duyệt nhận đồ (Admin)
+                  </Button>
+                )}
               </Space>
             </div>
 
@@ -577,24 +620,50 @@ function App() {
                   </div>
                 </Card>
 
-                <Card className="section-card quick-card" title="Truy cập nhanh">
-                  <Button block icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
-                    Đồng bộ dữ liệu
-                  </Button>
+                <Card className="section-card quick-card" title="Thao tác nhanh">
                   <Button
                     block
+                    type="primary"
+                    style={{ background: '#10b981', borderColor: '#10b981' }}
                     icon={<InboxOutlined />}
-                    onClick={() => message.info('Phần quản lý đồ thất lạc sẽ được bổ sung ở bước tiếp theo.')}
+                    onClick={() => setDepositModalOpen(true)}
                   >
-                    Quản lý đồ thất lạc
+                    Gửi đồ nhặt được vào tủ
                   </Button>
                   <Button
                     block
-                    icon={<SafetyCertificateOutlined />}
-                    onClick={() => message.info('Chức năng mở ngăn sẽ được kết nối với ESP32 sau.')}
+                    icon={<SearchOutlined />}
+                    onClick={() => {
+                      const el = document.getElementById('found-items-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
                   >
-                    Điều khiển tủ IoT
+                    Tìm kiếm đồ thất lạc
                   </Button>
+                  <Button
+                    block
+                    icon={<KeyOutlined />}
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        setAuthModalTab('login');
+                        setAuthModalOpen(true);
+                      } else {
+                        setMyClaimsOpen(true);
+                      }
+                    }}
+                  >
+                    Nhập mã OTP mở tủ
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      block
+                      type="dashed"
+                      icon={<SafetyCertificateOutlined />}
+                      onClick={() => setAdminClaimsOpen(true)}
+                    >
+                      Xác minh yêu cầu nhận đồ (Admin)
+                    </Button>
+                  )}
                 </Card>
 
                 <Card className="tip-card">
@@ -608,7 +677,16 @@ function App() {
               </Col>
             </Row>
 
-            <div className="page-footer">
+            <div id="found-items-section">
+              <FoundItemsList
+                onSuccessClaim={() => {
+                  void loadData();
+                  setMyClaimsOpen(true);
+                }}
+              />
+            </div>
+
+            <div className="page-footer" style={{ marginTop: 40 }}>
               <Text type="secondary">FindBox Smart Locker · Dashboard quản lý đồ thất lạc</Text>
               <Text type="secondary">Prototype · 2026</Text>
             </div>
@@ -687,6 +765,24 @@ function App() {
         open={authModalOpen}
         onCancel={() => setAuthModalOpen(false)}
         defaultTab={authModalTab}
+      />
+
+      <DepositItemModal
+        open={depositModalOpen}
+        onCancel={() => setDepositModalOpen(false)}
+        onSuccess={() => void loadData()}
+      />
+
+      <MyClaimsModal
+        open={myClaimsOpen}
+        onCancel={() => setMyClaimsOpen(false)}
+        onSuccess={() => void loadData()}
+      />
+
+      <AdminClaimsDrawer
+        open={adminClaimsOpen}
+        onClose={() => setAdminClaimsOpen(false)}
+        onRefreshParent={() => void loadData()}
       />
     </AntApp>
   );

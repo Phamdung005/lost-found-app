@@ -3,7 +3,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { pool } from "./db.js";
 import authRouter from "./routes/auth.js";
+import foundItemsRouter from "./routes/found_items.js";
+import claimsRouter from "./routes/claims.js";
 import { runAuthMigration } from "./migrations/init_auth.js";
+import { runBusinessMigration } from "./migrations/init_business.js";
 import { authenticateToken, requireAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -16,6 +19,8 @@ app.use(express.json());
 
 // Routes
 app.use("/api/auth", authRouter);
+app.use("/api/found-items", foundItemsRouter);
+app.use("/api/claims", claimsRouter);
 
 app.get("/api/db-check", async (_req, res) => {
   try {
@@ -69,8 +74,12 @@ app.get("/api/lockers/:lockerCode/slots", async (req, res) => {
     const result = await pool.query(
       `
         SELECT
+          s.id,
           l.locker_code,
           s.slot_code,
+          COALESCE(s.occupancy_status, s.status, 'empty') AS occupancy_status,
+          COALESCE(s.door_status, 'closed') AS door_status,
+          COALESCE(s.device_status, 'online') AS device_status,
           s.status
         FROM lockers l
         JOIN locker_slots s ON s.locker_id = l.id
@@ -93,15 +102,30 @@ app.get("/api/lockers/:lockerCode/slots", async (req, res) => {
   }
 });
 
-app.get("/api/lost-reports", async (_req, res) => {
+app.get("/api/lost-reports", async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT id, item_name, description, lost_location,
+    const { search, category } = req.query;
+    let query = `
+      SELECT id, item_name, category, description, lost_location,
              lost_at, reporter_contact, status, created_at
       FROM lost_reports
-      ORDER BY created_at DESC
-    `);
+      WHERE 1=1
+    `;
+    const params: any[] = [];
 
+    if (search && typeof search === "string" && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      query += ` AND (LOWER(item_name) LIKE $${params.length} OR LOWER(lost_location) LIKE $${params.length})`;
+    }
+
+    if (category && typeof category === "string" && category !== "all") {
+      params.push(category);
+      query += ` AND category = $${params.length}`;
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const result = await pool.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error("Get lost reports failed:", error);
@@ -116,6 +140,7 @@ app.post("/api/lost-reports", async (req, res) => {
   try {
     const {
       item_name,
+      category,
       description,
       lost_location,
       lost_at,
@@ -137,12 +162,13 @@ app.post("/api/lost-reports", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO lost_reports
-       (item_name, description, lost_location, lost_at, reporter_contact)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, item_name, description, lost_location,
+       (item_name, category, description, lost_location, lost_at, reporter_contact)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, item_name, category, description, lost_location,
                  lost_at, reporter_contact, status, created_at`,
       [
         item_name.trim(),
+        category || "other",
         description || null,
         lost_location.trim(),
         lost_at || null,
@@ -176,6 +202,7 @@ app.get("/api/admin/check", authenticateToken, requireAdmin, (req, res) => {
 async function startServer() {
   try {
     await runAuthMigration();
+    await runBusinessMigration();
   } catch (err) {
     console.warn("Migration warning at start:", err);
   }
