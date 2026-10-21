@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { pool } from "./db.js";
+import authRouter from "./routes/auth.js";
+import { runAuthMigration } from "./migrations/init_auth.js";
+import { authenticateToken, requireAdmin } from "./middleware/auth.js";
 
 dotenv.config();
 
@@ -10,6 +13,9 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Routes
+app.use("/api/auth", authRouter);
 
 app.get("/api/db-check", async (_req, res) => {
   try {
@@ -158,6 +164,25 @@ app.post("/api/lost-reports", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Smart Locker API running at http://localhost:${PORT}`);
+// Endpoint kiểm tra quyền Admin
+app.get("/api/admin/check", authenticateToken, requireAdmin, (req, res) => {
+  res.json({
+    success: true,
+    message: "Xác thực Admin hợp lệ",
+    admin: (req as any).user,
+  });
 });
+
+async function startServer() {
+  try {
+    await runAuthMigration();
+  } catch (err) {
+    console.warn("Migration warning at start:", err);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Smart Locker API running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();

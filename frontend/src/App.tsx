@@ -31,7 +31,11 @@ import {
   SafetyCertificateOutlined,
   FileAddOutlined,
   SearchOutlined,
+  LogoutOutlined,
+  LoginOutlined,
 } from '@ant-design/icons';
+import { useAuth } from './context/AuthContext';
+import { AuthModal } from './components/AuthModal';
 import './App.css';
 
 const { Header, Sider, Content } = Layout;
@@ -64,6 +68,10 @@ type LostReport = {
 const API = 'http://localhost:3000/api';
 
 function App() {
+  const { user, isAdmin, isAuthenticated, logout } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
+
   const [lockers, setLockers] = useState<Locker[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(false);
@@ -170,41 +178,65 @@ function App() {
             </div>
           </div>
 
-          <div className="menu-label">WORKSPACE</div>
+          <div className="menu-label">{isAdmin ? 'WORKSPACE QUẢN TRỊ' : 'DỊCH VỤ FINDBOX'}</div>
           <Menu
             theme="dark"
             mode="inline"
             selectedKeys={['dashboard']}
-            items={[
-              {
-                key: 'dashboard',
-                icon: <DashboardOutlined />,
-                label: 'Tổng quan',
-              },
-              {
-                key: 'items',
-                icon: <InboxOutlined />,
-                label: 'Đồ thất lạc',
-              },
-              {
-                key: 'lockers',
-                icon: <AppstoreOutlined />,
-                label: 'Quản lý tủ đồ',
-              },
-              {
-                key: 'reports',
-                icon: <BoxPlotOutlined />,
-                label: 'Báo cáo mất đồ',
-              },
-            ]}
+            items={
+              isAdmin
+                ? [
+                    {
+                      key: 'dashboard',
+                      icon: <DashboardOutlined />,
+                      label: 'Tổng quan hệ thống',
+                    },
+                    {
+                      key: 'lockers',
+                      icon: <AppstoreOutlined />,
+                      label: 'Quản lý tủ & Ngăn IoT',
+                    },
+                    {
+                      key: 'reports',
+                      icon: <BoxPlotOutlined />,
+                      label: 'Xử lý báo mất đồ',
+                    },
+                    {
+                      key: 'items',
+                      icon: <InboxOutlined />,
+                      label: 'Đồ tìm thấy trong tủ',
+                    },
+                  ]
+                : [
+                    {
+                      key: 'dashboard',
+                      icon: <DashboardOutlined />,
+                      label: 'Trang chủ FindBox',
+                    },
+                    {
+                      key: 'reports',
+                      icon: <SearchOutlined />,
+                      label: 'Tìm đồ & Báo mất',
+                    },
+                    {
+                      key: 'items',
+                      icon: <InboxOutlined />,
+                      label: 'Đồ tìm thấy gần đây',
+                    },
+                  ]
+            }
           />
 
           <div className="sidebar-bottom">
             <div className="help-card">
               <div className="help-icon"><SafetyCertificateOutlined /></div>
-              <Text strong className="help-title">Hệ thống an toàn</Text>
+              <Text strong className="help-title">
+                {isAdmin ? 'Chế độ Quản trị' : 'Dịch vụ An toàn'}
+              </Text>
               <Text className="help-description">
-                Theo dõi trạng thái tủ và các ngăn lưu trữ.
+                {isAdmin
+                  ? 'Toàn quyền kiểm soát và mở ngăn tủ IoT.'
+                  : 'Gửi đồ và tìm lại đồ thất lạc nhanh chóng.'}
               </Text>
               <Tag color={apiOnline ? 'success' : 'warning'}>
                 {apiOnline ? 'Backend đang kết nối' : 'Đang kiểm tra kết nối'}
@@ -217,20 +249,49 @@ function App() {
         <Layout>
           <Header className="topbar">
             <div>
-              <Text className="breadcrumb">Workspace / </Text>
-              <Text strong>Tổng quan</Text>
+              <Text className="breadcrumb">FindBox / </Text>
+              <Text strong>{isAdmin ? 'Khu vực Quản trị' : 'Khu vực Người dùng'}</Text>
             </div>
-            <Space size={16}>
+            <Space size={16} align="center">
               <Badge dot={apiOnline} color={apiOnline ? '#22c55e' : '#f59e0b'}>
                 <BellOutlined className="topbar-icon" />
               </Badge>
-              <div className="profile">
-                <div className="profile-avatar">A</div>
-                <div className="profile-info">
-                  <Text strong>Quản trị viên</Text>
-                  <Text type="secondary" className="profile-role">Administrator</Text>
+
+              {isAuthenticated && user ? (
+                <div className="profile" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div className="profile-avatar">
+                    {user.full_name ? user.full_name[0].toUpperCase() : 'U'}
+                  </div>
+                  <div className="profile-info">
+                    <Text strong>{user.full_name}</Text>
+                    <Text type="secondary" className="profile-role">
+                      {user.role === 'admin' ? 'Quản trị viên' : 'Thành viên'}
+                    </Text>
+                  </div>
+                  <Button
+                    type="text"
+                    danger
+                    icon={<LogoutOutlined />}
+                    onClick={logout}
+                    title="Đăng xuất"
+                  >
+                    Đăng xuất
+                  </Button>
                 </div>
-              </div>
+              ) : (
+                <Space>
+                  <Button
+                    type="primary"
+                    icon={<LoginOutlined />}
+                    onClick={() => {
+                      setAuthModalTab('login');
+                      setAuthModalOpen(true);
+                    }}
+                  >
+                    Đăng nhập / Đăng ký
+                  </Button>
+                </Space>
+              )}
             </Space>
           </Header>
 
@@ -621,6 +682,12 @@ function App() {
           </Button>
         </Form>
       </Modal>
+
+      <AuthModal
+        open={authModalOpen}
+        onCancel={() => setAuthModalOpen(false)}
+        defaultTab={authModalTab}
+      />
     </AntApp>
   );
 }
