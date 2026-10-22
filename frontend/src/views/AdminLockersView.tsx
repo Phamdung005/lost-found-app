@@ -184,10 +184,6 @@ export const AdminLockersView: React.FC = () => {
   };
 
   const isOnline = Boolean(deviceStatus?.is_online ?? deviceStatus?.locker?.is_online);
-  const lastHeartbeat =
-    deviceStatus?.last_heartbeat ??
-    deviceStatus?.locker?.last_heartbeat ??
-    deviceStatus?.last_seen_at;
 
   return (
     <div>
@@ -219,22 +215,16 @@ export const AdminLockersView: React.FC = () => {
           marginBottom: 16,
           background: '#ffffff',
           borderLeft: isOnline ? '4px solid #16a34a' : '4px solid #94a3b8',
+          padding: '12px 16px',
         }}
       >
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
-            Trạng thái kết nối Phần cứng ESP32:
-          </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-            {lastHeartbeat
-              ? `Nhịp tim gần nhất: ${new Date(lastHeartbeat).toLocaleTimeString('vi-VN')} (${new Date(lastHeartbeat).toLocaleDateString('vi-VN')})`
-              : 'Chưa nhận được tín hiệu heartbeat từ ESP32'}
-          </div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+          Trạng thái kết nối Phần cứng:
         </div>
         <Tag
           icon={isOnline ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
           color={isOnline ? 'success' : 'default'}
-          style={{ padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+          style={{ padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, margin: 0 }}
         >
           {isOnline ? 'ESP32 Trực tuyến' : 'ESP32 Ngoại tuyến'}
         </Tag>
