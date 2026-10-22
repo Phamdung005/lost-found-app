@@ -36,8 +36,8 @@ export const AdminLockersView: React.FC = () => {
   const [newSlotCode, setNewSlotCode] = useState('');
   const [addingSlot, setAddingSlot] = useState(false);
 
-  const fetchLockerData = async () => {
-    setLoading(true);
+  const fetchLockerData = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const [statusRes, slotsRes, historyRes] = await Promise.all([
         fetch(`${API_BASE}/device/status`),
@@ -62,15 +62,15 @@ export const AdminLockersView: React.FC = () => {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
   useEffect(() => {
     void fetchLockerData();
     const interval = setInterval(() => {
-      void fetchLockerData();
-    }, 10000); // Poll every 10s
+      void fetchLockerData(true); // Polling ngầm mỗi 2.5s mượt mà không chớp màn hình
+    }, 2500);
     return () => clearInterval(interval);
   }, [token]);
 
@@ -199,7 +199,7 @@ export const AdminLockersView: React.FC = () => {
         <Button
           size="small"
           icon={<ReloadOutlined />}
-          onClick={fetchLockerData}
+          onClick={() => void fetchLockerData(false)}
           loading={loading}
           style={{ borderRadius: 8 }}
         />
