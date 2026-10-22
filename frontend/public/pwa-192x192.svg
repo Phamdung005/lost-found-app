@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <defs>
+    <linearGradient id="boxGrad192" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad192" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="128" fill="#f8fafc"/>
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#boxGrad192)"/>
+
+  <!-- Smart Locker Body Graphic -->
+  <rect x="120" y="110" width="272" height="300" rx="28" fill="#ffffff" fill-opacity="0.15"/>
+  <rect x="136" y="126" width="240" height="268" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="6"/>
+
+  <line x1="136" y1="260" x2="376" y2="260" stroke="#cbd5e1" stroke-width="6" stroke-dasharray="8 6"/>
+
+  <!-- Slot A01 -->
+  <rect x="156" y="146" width="200" height="94" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="4"/>
+  <circle cx="330" cy="193" r="8" fill="#2563eb"/>
+  <text x="176" y="202" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="bold" fill="#1e40af">A01</text>
+
+  <!-- Slot A02 -->
+  <rect x="156" y="280" width="200" height="94" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="4"/>
+  <circle cx="330" cy="327" r="8" fill="#2563eb"/>
+  <text x="176" y="336" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="bold" fill="#1e40af">A02</text>
+
+  <!-- Shield -->
+  <g transform="translate(320, 310)">
+    <circle cx="50" cy="50" r="56" fill="#ffffff"/>
+    <path d="M50 20 L80 34 C80 62 66 82 50 90 C34 82 20 62 20 34 Z" fill="url(#shieldGrad192)"/>
+    <path d="M38 52 L46 60 L62 42" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

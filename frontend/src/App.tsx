@@ -35,6 +35,7 @@ import {
   LoginOutlined,
   KeyOutlined,
   ThunderboltOutlined,
+  AppleOutlined,
 } from '@ant-design/icons';
 import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
@@ -43,6 +44,7 @@ import { FoundItemsList } from './components/FoundItemsList';
 import { MyClaimsModal } from './components/MyClaimsModal';
 import { AdminClaimsDrawer } from './components/AdminClaimsDrawer';
 import { LockerControlDrawer } from './components/LockerControlDrawer';
+import { PWAInstallGuideModal } from './components/PWAInstallGuideModal';
 import './App.css';
 
 const { Header, Sider, Content } = Layout;
@@ -88,6 +90,7 @@ function App() {
   const [myClaimsOpen, setMyClaimsOpen] = useState(false);
   const [adminClaimsOpen, setAdminClaimsOpen] = useState(false);
   const [lockerControlOpen, setLockerControlOpen] = useState(false);
+  const [pwaModalOpen, setPwaModalOpen] = useState(false);
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [submitting, setSubmitting] = useState(false);
   const [reportForm] = Form.useForm();
@@ -285,7 +288,16 @@ function App() {
               <Text className="breadcrumb">FindBox / </Text>
               <Text strong>{isAdmin ? 'Khu vực Quản trị' : 'Khu vực Người dùng'}</Text>
             </div>
-            <Space size={16} align="center">
+            <Space size={14} align="center">
+              <Button
+                type="default"
+                icon={<AppleOutlined />}
+                onClick={() => setPwaModalOpen(true)}
+                style={{ borderRadius: 8, fontSize: 13 }}
+              >
+                PWA iPhone
+              </Button>
+
               <Badge dot={apiOnline} color={apiOnline ? '#22c55e' : '#f59e0b'}>
                 <BellOutlined className="topbar-icon" />
               </Badge>
@@ -826,6 +838,11 @@ function App() {
         open={lockerControlOpen}
         onClose={() => setLockerControlOpen(false)}
         onRefreshParent={() => void loadData()}
+      />
+
+      <PWAInstallGuideModal
+        open={pwaModalOpen}
+        onCancel={() => setPwaModalOpen(false)}
       />
     </AntApp>
   );
