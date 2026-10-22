@@ -188,8 +188,6 @@ export const AdminLockersView: React.FC = () => {
     deviceStatus?.last_heartbeat ??
     deviceStatus?.locker?.last_heartbeat ??
     deviceStatus?.last_seen_at;
-  const ipAddress = deviceStatus?.ip_address ?? deviceStatus?.locker?.ip_address;
-  const wifiRssi = deviceStatus?.wifi_rssi ?? deviceStatus?.locker?.wifi_rssi;
 
   return (
     <div>
@@ -229,7 +227,7 @@ export const AdminLockersView: React.FC = () => {
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
             {lastHeartbeat
-              ? `Nhịp tim gần nhất: ${new Date(lastHeartbeat).toLocaleTimeString('vi-VN')} (${new Date(lastHeartbeat).toLocaleDateString('vi-VN')})${ipAddress ? ` • IP: ${ipAddress}` : ''}${wifiRssi ? ` • Sóng: ${wifiRssi}dBm` : ''}`
+              ? `Nhịp tim gần nhất: ${new Date(lastHeartbeat).toLocaleTimeString('vi-VN')} (${new Date(lastHeartbeat).toLocaleDateString('vi-VN')})`
               : 'Chưa nhận được tín hiệu heartbeat từ ESP32'}
           </div>
         </div>
