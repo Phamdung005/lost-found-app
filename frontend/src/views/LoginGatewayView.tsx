@@ -27,7 +27,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
-import { getApiBase, setCustomApiBase } from '../config/api';
+import { getApiBase, setCustomApiBase, cleanApiBase } from '../config/api';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -44,15 +44,33 @@ export const LoginGatewayView: React.FC<LoginGatewayViewProps> = ({ onOpenPwaGui
 
   // Server config modal state
   const [serverModalOpen, setServerModalOpen] = useState(false);
-  const [serverUrlInput, setServerUrlInput] = useState(() => getApiBase());
+  const [serverUrlInput, setServerUrlInput] = useState(() => {
+    const current = getApiBase();
+    return current === '/api' ? '' : current;
+  });
   const [pingStatus, setPingStatus] = useState<'testing' | 'online' | 'offline' | null>(null);
   const [pingMessage, setPingMessage] = useState<string>('');
 
   const checkConnection = async (targetUrl?: string) => {
-    const base = (targetUrl !== undefined ? targetUrl : getApiBase()).trim().replace(/\/+$/, '');
+    const raw = targetUrl !== undefined ? targetUrl : getApiBase();
+    const base = cleanApiBase(raw);
+
+    if (!base || base === '/api') {
+      setPingStatus('offline');
+      setPingMessage('Chưa cấu hình URL Backend. Vui lòng nhập link Backend Render của bạn.');
+      return;
+    }
+
     setPingStatus('testing');
     try {
       const res = await fetch(`${base}/db-check`, { method: 'GET' });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setPingStatus('offline');
+        setPingMessage('Máy chủ trả về HTML thay vì JSON API. Vui lòng kiểm tra lại URL Backend.');
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         setPingStatus('online');
@@ -73,7 +91,7 @@ export const LoginGatewayView: React.FC<LoginGatewayViewProps> = ({ onOpenPwaGui
   }, []);
 
   const handleSaveServerUrl = () => {
-    const cleaned = serverUrlInput.trim().replace(/\/+$/, '');
+    const cleaned = cleanApiBase(serverUrlInput);
     setCustomApiBase(cleaned);
     message.success('Đã lưu cấu hình máy chủ! Ứng dụng sẽ áp dụng URL mới.');
     setServerModalOpen(false);
