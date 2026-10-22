@@ -9,7 +9,7 @@ import {
   KeyOutlined,
   RightOutlined
 } from '@ant-design/icons';
-const API_BASE = '/api';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api';
 
 const { Title, Text } = Typography;
 
