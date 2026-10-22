@@ -43,9 +43,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [submittingRedeem, setSubmittingRedeem] = useState(false);
 
   // Fetch my claims
-  const fetchMyClaims = async () => {
+  const fetchMyClaims = async (isSilent = false) => {
     if (!token) return;
-    setLoadingClaims(true);
+    if (!isSilent) setLoadingClaims(true);
     try {
       const res = await fetch(`${API_BASE}/claims/my`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -57,13 +57,17 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     } catch (err) {
       console.error(err);
     } finally {
-      setLoadingClaims(false);
+      if (!isSilent) setLoadingClaims(false);
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       void fetchMyClaims();
+      const interval = setInterval(() => {
+        void fetchMyClaims(true); // Tự động làm mới ngầm mỗi 3s khi Admin phê duyệt
+      }, 3000);
+      return () => clearInterval(interval);
     }
   }, [isAuthenticated, token]);
 
@@ -245,7 +249,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         <Button
           block
           icon={<ReloadOutlined />}
-          onClick={fetchMyClaims}
+          onClick={() => void fetchMyClaims(false)}
           loading={loadingClaims}
           style={{ borderRadius: 10, fontSize: 13 }}
         >
@@ -324,14 +328,30 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                         borderRadius: 10,
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {/* Vị trí tủ đồ và Ngăn tủ */}
+                      <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 8, marginBottom: 10, fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ color: '#64748b' }}>Tủ đồ nhận hàng:</span>
+                          <strong>{claim.locker_code || 'Tủ L-001'} ({claim.locker_location || 'Khu vực Trung tâm'})</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748b' }}>Ngăn tủ của bạn:</span>
+                          <Tag color="blue" style={{ fontWeight: 700, margin: 0, fontSize: 12 }}>
+                            Ngăn {claim.slot_code || 'A01'}
+                          </Tag>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <div>
-                          <Text type="secondary" style={{ fontSize: 11 }}>MÃ OTP MỞ TỦ (DÙNG 1 LẦN):</Text>
-                          <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: 4, color: '#16a34a' }}>
+                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
+                            MÃ OTP MỞ TỦ (DÙNG 1 LẦN):
+                          </Text>
+                          <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: 4, color: '#16a34a' }}>
                             {claim.claim_code}
                           </div>
-                          <div style={{ fontSize: 10, color: '#64748b' }}>
-                            Hết hạn: {new Date(claim.code_expires_at).toLocaleTimeString('vi-VN')}
+                          <div style={{ fontSize: 11, color: '#64748b' }}>
+                            Hiệu lực đến: {new Date(claim.code_expires_at).toLocaleTimeString('vi-VN')}
                           </div>
                         </div>
 
@@ -350,9 +370,26 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                               setInputOtp(claim.claim_code);
                             }}
                           >
-                            Mở ngăn tủ
+                            Mở từ xa
                           </Button>
                         )}
+                      </div>
+
+                      {/* Hướng dẫn bấm trên bàn phím Keypad phần cứng */}
+                      <div
+                        style={{
+                          background: '#ecfdf5',
+                          border: '1px solid #a7f3d0',
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          color: '#065f46',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        👉 <strong>Cách mở tại Tủ phần cứng:</strong> Đến tủ đồ, bấm phím{' '}
+                        <strong>{claim.slot_code === 'A02' ? '2' : '1'}</strong> (chọn ngăn {claim.slot_code || 'A01'}) &rarr; Nhập 6 số{' '}
+                        <strong>{claim.claim_code}</strong> &rarr; Bấm phím <strong>#</strong> để mở cửa!
                       </div>
 
                       {isRedeemingThis && (

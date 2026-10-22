@@ -107,14 +107,18 @@ router.get("/my", authenticateToken, async (req: AuthenticatedRequest, res: Resp
          c.claimed_at,
          c.created_at,
          f.item_name,
+         f.item_name,
          f.category,
          f.found_location,
          f.image_url,
+         s.id as slot_id,
          s.slot_code,
-         l.locker_code
+         l.id as locker_id,
+         l.locker_code,
+         l.location as locker_location
        FROM found_item_claims c
        JOIN found_items f ON c.found_item_id = f.id
-       LEFT JOIN locker_slots s ON f.slot_id = s.id
+       LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
        LEFT JOIN lockers l ON s.locker_id = l.id
        WHERE c.user_id = $1
        ORDER BY c.id DESC`,
@@ -276,10 +280,10 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
 
     const claimRes = await client.query(
       `SELECT c.id, c.user_id, c.found_item_id, c.status, c.claim_code, c.code_expires_at,
-              f.item_name, f.slot_id, s.slot_code, s.locker_id, l.locker_code
+              f.item_name, s.id as slot_id, s.slot_code, s.locker_id, l.locker_code
        FROM found_item_claims c
        JOIN found_items f ON c.found_item_id = f.id
-       LEFT JOIN locker_slots s ON f.slot_id = s.id
+       LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
        LEFT JOIN lockers l ON s.locker_id = l.id
        WHERE c.id = $1 FOR UPDATE OF c`,
       [Number(claim_id)]
@@ -354,12 +358,25 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
         [now, claim.slot_id]
       );
 
+      // Kích hoạt servo mở tủ cho người dùng
+      if (claim.locker_id) {
+        await client.query(
+          `INSERT INTO locker_commands (locker_id, slot_id, command_type, status, parameters)
+           VALUES ($1, $2, 'OPEN_SLOT', 'pending', $3)`,
+          [claim.locker_id, claim.slot_id, JSON.stringify({ duration_ms: 10000, reason: "USER_REDEEM_OTP" })]
+        );
+      }
+
       // Ghi access_logs
-      await client.query(
-        `INSERT INTO access_logs (slot_id, action, actor, success, reason)
-         VALUES ($1, 'RETRIEVE_ITEM', $2, true, 'Người dùng đã dùng mã OTP nhận đồ thành công')`,
-        [claim.slot_id, req.user?.email || "User"]
-      );
+      try {
+        await client.query(
+          `INSERT INTO access_logs (slot_id, action, actor, success, reason)
+           VALUES ($1, 'RETRIEVE_ITEM', $2, true, 'Người dùng đã dùng mã OTP nhận đồ thành công')`,
+          [claim.slot_id, req.user?.email || "User"]
+        );
+      } catch (logErr) {
+        console.warn("Could not insert access_log:", logErr);
+      }
     }
 
     await client.query("COMMIT");
