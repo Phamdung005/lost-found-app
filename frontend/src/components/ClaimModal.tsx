@@ -12,7 +12,7 @@ interface ClaimModalProps {
   onSuccess: () => void;
 }
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = '/api';
 
 export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, onSuccess }) => {
   const [form] = Form.useForm();
