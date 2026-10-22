@@ -31,6 +31,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       image_url,
       finder_contact,
       slot_id,
+      slot_code,
+      locker_code,
     } = req.body;
 
     if (!item_name || typeof item_name !== "string" || !item_name.trim()) {
@@ -46,13 +48,15 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
     await client.query("BEGIN");
 
     let finalSlotId: number | null = null;
+    let targetSlotCode: string | null = null;
+    let targetLockerId: number | null = null;
     let initialStatus = "reported"; // Mới ghi nhận thông tin
 
-    // Nếu người dùng chọn gửi trực tiếp vào ngăn tủ
+    // Nếu người dùng chọn gửi trực tiếp vào ngăn tủ (truyền slot_id hoặc slot_code như A01)
     if (slot_id) {
       const slotNum = Number(slot_id);
       const slotCheck = await client.query(
-        "SELECT id, slot_code, occupancy_status, status FROM locker_slots WHERE id = $1 FOR UPDATE",
+        "SELECT id, slot_code, occupancy_status, status, locker_id FROM locker_slots WHERE id = $1 FOR UPDATE",
         [slotNum]
       );
 
@@ -73,35 +77,113 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         return;
       }
 
+      finalSlotId = slot.id;
+      targetSlotCode = slot.slot_code;
+      targetLockerId = slot.locker_id;
+    } else if (slot_code) {
+      const lCode = locker_code || "L-001";
+      const slotCheck = await client.query(
+        `SELECT s.id, s.slot_code, s.occupancy_status, s.status, s.locker_id 
+         FROM locker_slots s 
+         JOIN lockers l ON s.locker_id = l.id 
+         WHERE l.locker_code = $1 AND s.slot_code = $2 FOR UPDATE`,
+        [lCode, slot_code]
+      );
+
+      if (slotCheck.rows.length === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ success: false, message: `Ngăn tủ ${slot_code} không tồn tại` });
+        return;
+      }
+
+      const slot = slotCheck.rows[0];
+      const occ = (slot.occupancy_status || slot.status || "").toLowerCase();
+      if (occ !== "empty") {
+        await client.query("ROLLBACK");
+        res.status(400).json({
+          success: false,
+          message: `Ngăn ${slot.slot_code} hiện không còn trống (${occ}). Vui lòng chọn ngăn khác.`,
+        });
+        return;
+      }
+
+      finalSlotId = slot.id;
+      targetSlotCode = slot.slot_code;
+      targetLockerId = slot.locker_id;
+    }
+
+    if (finalSlotId) {
       // Đánh dấu ngăn đã có đồ
       await client.query(
         `UPDATE locker_slots 
          SET occupancy_status = 'occupied', status = 'occupied', updated_at = now() 
          WHERE id = $1`,
-        [slotNum]
+        [finalSlotId]
       );
 
-      finalSlotId = slotNum;
       initialStatus = "stored"; // Đã được đưa vào tủ
 
-      // Ghi log mở/sử dụng ngăn
-      await client.query(
-        `INSERT INTO access_logs (slot_id, action, actor, success, reason)
-         VALUES ($1, 'DEPOSIT_ITEM', $2, true, 'Người dùng cất đồ nhặt được vào ngăn')`,
-        [slotNum, finder_contact || "Anonymous Finder"]
-      );
+      // Kích hoạt mở ngăn tủ phần cứng cho người dùng cất đồ
+      if (targetLockerId) {
+        await client.query(
+          `INSERT INTO locker_commands (locker_id, slot_id, command_type, status, parameters)
+           VALUES ($1, $2, 'OPEN_SLOT', 'pending', $3)`,
+          [targetLockerId, finalSlotId, JSON.stringify({ duration_ms: 10000, reason: "DEPOSIT_ITEM" })]
+        );
+      }
+
+      // Ghi log mở/sử dụng ngăn an toàn
+      try {
+        await client.query(
+          `INSERT INTO access_logs (slot_id, action, actor, success, reason)
+           VALUES ($1, 'DEPOSIT_ITEM', $2, true, 'Người dùng cất đồ nhặt được vào ngăn')`,
+          [finalSlotId, finder_contact || "Anonymous Finder"]
+        );
+      } catch (logErr) {
+        console.warn("Could not insert access_log:", logErr);
+      }
     }
 
     const trackingCode = generateTrackingCode();
 
-    const insertResult = await client.query(
-      `INSERT INTO found_items 
-       (item_name, category, description, found_location, found_at, image_url, 
-        finder_contact, slot_id, status, tracking_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id, item_name, category, description, found_location, found_at,
-                 image_url, finder_contact, slot_id, status, tracking_code`,
-      [
+    // Kiểm tra xem bảng found_items hiện có các cột nào (slot_id, locker_slot_id) để insert an toàn 100%
+    const colCheck = await client.query(
+      `SELECT column_name FROM information_schema.columns 
+       WHERE table_name = 'found_items' AND column_name IN ('slot_id', 'locker_slot_id')`
+    );
+    const existingCols = colCheck.rows.map((r: any) => r.column_name);
+
+    let insertQuery = "";
+    let insertParams: any[] = [];
+
+    if (existingCols.includes("slot_id") && existingCols.includes("locker_slot_id")) {
+      insertQuery = `INSERT INTO found_items 
+        (item_name, category, description, found_location, found_at, image_url, 
+         finder_contact, slot_id, locker_slot_id, status, tracking_code)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id, item_name, category, description, found_location, found_at,
+                  image_url, finder_contact, status, tracking_code`;
+      insertParams = [
+        item_name.trim(),
+        category || "other",
+        description || null,
+        found_location.trim(),
+        found_at || new Date(),
+        image_url || null,
+        finder_contact || null,
+        finalSlotId,
+        finalSlotId,
+        initialStatus,
+        trackingCode,
+      ];
+    } else if (existingCols.includes("slot_id")) {
+      insertQuery = `INSERT INTO found_items 
+        (item_name, category, description, found_location, found_at, image_url, 
+         finder_contact, slot_id, status, tracking_code)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, item_name, category, description, found_location, found_at,
+                  image_url, finder_contact, status, tracking_code`;
+      insertParams = [
         item_name.trim(),
         category || "other",
         description || null,
@@ -112,8 +194,29 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         finalSlotId,
         initialStatus,
         trackingCode,
-      ]
-    );
+      ];
+    } else {
+      insertQuery = `INSERT INTO found_items 
+        (item_name, category, description, found_location, found_at, image_url, 
+         finder_contact, locker_slot_id, status, tracking_code)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, item_name, category, description, found_location, found_at,
+                  image_url, finder_contact, status, tracking_code`;
+      insertParams = [
+        item_name.trim(),
+        category || "other",
+        description || null,
+        found_location.trim(),
+        found_at || new Date(),
+        image_url || null,
+        finder_contact || null,
+        finalSlotId,
+        initialStatus,
+        trackingCode,
+      ];
+    }
+
+    const insertResult = await client.query(insertQuery, insertParams);
 
     await client.query("COMMIT");
 
@@ -122,19 +225,26 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       id: createdItem.id,
       tracking_code: trackingCode,
       has_slot: !!finalSlotId,
+      slot_code: targetSlotCode,
     });
 
     res.status(201).json({
       success: true,
       message: finalSlotId
-        ? "Đã lưu thông tin và tiếp nhận đồ vào ngăn tủ thành công"
+        ? `Đã tiếp nhận đồ và mở ngăn ${targetSlotCode} để cất đồ thành công`
         : "Đã ghi nhận thông tin đồ nhặt được (chưa gửi vào ngăn tủ)",
-      data: createdItem,
+      data: {
+        ...createdItem,
+        slot_code: targetSlotCode,
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
     await client.query("ROLLBACK");
     console.error("Create found item error:", error);
-    res.status(500).json({ success: false, message: "Lỗi hệ thống khi tạo bản ghi đồ nhặt được" });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message ? `Lỗi hệ thống: ${error.message}` : "Lỗi hệ thống khi tạo bản ghi đồ nhặt được" 
+    });
   } finally {
     client.release();
   }
