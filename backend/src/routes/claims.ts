@@ -85,7 +85,7 @@ router.post("/", authenticateToken, async (req: AuthenticatedRequest, res: Respo
     // Thông báo cho Admin
     await createNotification({
       role: "admin",
-      title: "🙋 Yêu cầu nhận đồ mới",
+      title: "Yêu cầu nhận đồ mới",
       message: `Người dùng ${req.user?.email || "khách hàng"} vừa gửi yêu cầu nhận lại "${item.item_name}". Vui lòng đối chiếu và xác minh.`,
       type: "claim",
     });
@@ -94,7 +94,7 @@ router.post("/", authenticateToken, async (req: AuthenticatedRequest, res: Respo
     if (userId) {
       await createNotification({
         userId,
-        title: "⏳ Đã gửi yêu cầu nhận đồ",
+        title: "Đã gửi yêu cầu nhận đồ",
         message: `Yêu cầu nhận lại "${item.item_name}" đã gửi thành công. Quản trị viên đang tiến hành xác minh thông tin của bạn.`,
         type: "info",
       });
@@ -311,7 +311,7 @@ async function handleVerifyClaim(req: AuthenticatedRequest, res: Response): Prom
       // Thông báo cho User
       await createNotification({
         userId: claim.user_id,
-        title: "❌ Yêu cầu nhận đồ không được duyệt",
+        title: "Yêu cầu nhận đồ không được duyệt",
         message: `Yêu cầu nhận lại "${claim.item_name}" của bạn không được phê duyệt. Lý do: ${rejection_reason || "Thông tin đối chiếu không trùng khớp"}.`,
         type: "warning",
       });
@@ -319,7 +319,7 @@ async function handleVerifyClaim(req: AuthenticatedRequest, res: Response): Prom
       // Thông báo cho Admin
       await createNotification({
         role: "admin",
-        title: "🚫 Đã từ chối yêu cầu nhận đồ",
+        title: "Đã từ chối yêu cầu nhận đồ",
         message: `Admin đã từ chối yêu cầu nhận "${claim.item_name}" của ${claim.user_email || "người dùng"}.`,
         type: "info",
       });
@@ -358,7 +358,7 @@ async function handleVerifyClaim(req: AuthenticatedRequest, res: Response): Prom
     const lockerName = claim.locker_code || "L-001";
     await createNotification({
       userId: claim.user_id,
-      title: "🎉 Yêu cầu nhận đồ ĐÃ ĐƯỢC DUYỆT!",
+      title: "Yêu cầu nhận đồ ĐÃ ĐƯỢC DUYỆT!",
       message: `Yêu cầu nhận "${claim.item_name}" đã được duyệt! Mã OTP: [${otpCode}] (hiệu lực 30 phút). Vui lòng đến ${lockerName} - ${slotName} để mở tủ lấy đồ.`,
       type: "success",
     });
@@ -366,7 +366,7 @@ async function handleVerifyClaim(req: AuthenticatedRequest, res: Response): Prom
     // Thông báo cho Admin
     await createNotification({
       role: "admin",
-      title: "✅ Đã duyệt yêu cầu nhận đồ",
+      title: "Đã duyệt yêu cầu nhận đồ",
       message: `Admin đã duyệt yêu cầu nhận "${claim.item_name}" cho ${claim.user_email || "người dùng"}. Cấp OTP [${otpCode}] mở ${slotName}.`,
       type: "claim",
     });
@@ -524,7 +524,7 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
     if (claim.user_id) {
       await createNotification({
         userId: claim.user_id,
-        title: "🎁 Nhận lại đồ thành công",
+        title: "Nhận lại đồ thành công",
         message: `Ngăn ${claim.slot_code || "lưu trữ"} đã mở. Bạn đã nhận lại món đồ "${claim.item_name}". Cảm ơn bạn đã tin tưởng FindBox!`,
         type: "success",
       });
@@ -533,7 +533,7 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
     // Thông báo cho Admin
     await createNotification({
       role: "admin",
-      title: `🔓 Đồ vật đã trao trả (${claim.slot_code || "Ngăn tủ"})`,
+      title: `Đồ vật đã trao trả (${claim.slot_code || "Ngăn tủ"})`,
       message: `Người dùng đã mở ngăn ${claim.slot_code || ""} lấy lại "${claim.item_name}". Ngăn tủ đã chuyển sang trạng thái Trống.`,
       type: "locker",
     });
