@@ -78,8 +78,8 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
 
     const matchesStatus =
       filterStatus === 'all' ||
-      (filterStatus === 'in_locker' && item.status === 'in_locker') ||
-      (filterStatus === 'returned' && item.status === 'returned');
+      (filterStatus === 'in_locker' && (item.status === 'in_locker' || item.status === 'stored')) ||
+      (filterStatus === 'returned' && (item.status === 'returned' || item.status === 'claimed'));
 
     return matchesSearch && matchesStatus;
   });
@@ -155,7 +155,7 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
           onClick={() => setFilterStatus('in_locker')}
           style={{ borderRadius: 16, fontSize: 12 }}
         >
-          Đang trong tủ ({items.filter((i) => i.status === 'in_locker').length})
+          Đang trong tủ ({items.filter((i) => i.status === 'in_locker' || i.status === 'stored').length})
         </Button>
         <Button
           size="small"
@@ -163,7 +163,7 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
           onClick={() => setFilterStatus('returned')}
           style={{ borderRadius: 16, fontSize: 12 }}
         >
-          Đã trao trả ({items.filter((i) => i.status === 'returned').length})
+          Đã trao trả ({items.filter((i) => i.status === 'returned' || i.status === 'claimed').length})
         </Button>
       </div>
 
@@ -197,8 +197,8 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
                       width: 40,
                       height: 40,
                       borderRadius: 10,
-                      background: item.status === 'in_locker' ? '#eff6ff' : '#f1f5f9',
-                      color: item.status === 'in_locker' ? '#2563eb' : '#64748b',
+                      background: (item.status === 'in_locker' || item.status === 'stored') ? '#eff6ff' : '#f1f5f9',
+                      color: (item.status === 'in_locker' || item.status === 'stored') ? '#2563eb' : '#64748b',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -217,8 +217,21 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
                   </div>
                 </div>
 
-                <Tag color={item.status === 'in_locker' ? 'processing' : 'default'} style={{ margin: 0, borderRadius: 6 }}>
-                  {item.status === 'in_locker' ? 'Trong tủ' : 'Đã nhận'}
+                <Tag
+                  color={
+                    item.status === 'in_locker' || item.status === 'stored'
+                      ? 'processing'
+                      : item.status === 'reported'
+                      ? 'warning'
+                      : 'default'
+                  }
+                  style={{ margin: 0, borderRadius: 6 }}
+                >
+                  {item.status === 'in_locker' || item.status === 'stored'
+                    ? 'Trong tủ'
+                    : item.status === 'reported'
+                    ? 'Chờ cất tủ'
+                    : 'Đã nhận'}
                 </Tag>
               </div>
 
@@ -293,8 +306,17 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
             <Title level={4} style={{ margin: 0 }}>
               {activeModalItem.item_name}
             </Title>
-            <Tag color={activeModalItem.status === 'in_locker' ? 'processing' : 'default'} style={{ marginTop: 6 }}>
-              {activeModalItem.status === 'in_locker' ? 'Đang được lưu trong tủ' : 'Đã trao trả'}
+            <Tag
+              color={
+                activeModalItem.status === 'in_locker' || activeModalItem.status === 'stored'
+                  ? 'processing'
+                  : 'default'
+              }
+              style={{ marginTop: 6 }}
+            >
+              {activeModalItem.status === 'in_locker' || activeModalItem.status === 'stored'
+                ? 'Đang được lưu trong tủ'
+                : 'Đã trao trả'}
             </Tag>
           </div>
 
@@ -328,7 +350,7 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
             Để bảo vệ tài sản, thông tin chi tiết nhận dạng sẽ được người dùng đối chiếu trong biểu mẫu yêu cầu nhận lại đồ.
           </div>
 
-          {activeModalItem.status === 'in_locker' ? (
+          {activeModalItem.status === 'in_locker' || activeModalItem.status === 'stored' ? (
             <Button
               type="primary"
               size="large"

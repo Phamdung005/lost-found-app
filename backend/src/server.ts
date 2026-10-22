@@ -355,6 +355,50 @@ app.post("/api/lost-reports", async (req, res) => {
   }
 });
 
+// Cập nhật trạng thái báo cáo mất đồ (Dành cho Admin)
+app.patch("/api/lost-reports/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["searching", "found", "closed"].includes(status)) {
+      res.status(400).json({ success: false, message: "Trạng thái không hợp lệ (searching, found, closed)" });
+      return;
+    }
+
+    const result = await pool.query(
+      `UPDATE lost_reports SET status = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+      [status, id]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ success: false, message: "Không tìm thấy báo cáo mất đồ" });
+      return;
+    }
+
+    res.json({ success: true, message: "Đã cập nhật trạng thái báo cáo", data: result.rows[0] });
+  } catch (error) {
+    console.error("Update lost report error:", error);
+    res.status(500).json({ success: false, message: "Lỗi khi cập nhật báo cáo" });
+  }
+});
+
+// Xóa báo cáo mất đồ (Dành cho Admin)
+app.delete("/api/lost-reports/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("DELETE FROM lost_reports WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ success: false, message: "Không tìm thấy báo cáo mất đồ" });
+      return;
+    }
+    res.json({ success: true, message: "Đã xóa báo cáo mất đồ thành công" });
+  } catch (error) {
+    console.error("Delete lost report error:", error);
+    res.status(500).json({ success: false, message: "Lỗi khi xóa báo cáo" });
+  }
+});
+
 // Endpoint kiểm tra quyền Admin
 app.get("/api/admin/check", authenticateToken, requireAdmin, (req, res) => {
   res.json({

@@ -210,8 +210,21 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <Tag color={item.status === 'in_locker' ? 'processing' : 'default'} style={{ margin: 0 }}>
-                    {item.status === 'in_locker' ? 'Trong tủ' : 'Đã trả'}
+                  <Tag
+                    color={
+                      item.status === 'in_locker' || item.status === 'stored'
+                        ? 'processing'
+                        : item.status === 'reported'
+                        ? 'warning'
+                        : 'default'
+                    }
+                    style={{ margin: 0, borderRadius: 6 }}
+                  >
+                    {item.status === 'in_locker' || item.status === 'stored'
+                      ? 'Trong tủ'
+                      : item.status === 'reported'
+                      ? 'Chờ cất tủ'
+                      : 'Đã nhận lại'}
                   </Tag>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
                     <ClockCircleOutlined style={{ fontSize: 10 }} />{' '}

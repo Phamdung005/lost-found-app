@@ -121,7 +121,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         [finalSlotId]
       );
 
-      initialStatus = "stored"; // Đã được đưa vào tủ
+      initialStatus = "in_locker"; // Đang được lưu trong tủ
 
       // Kích hoạt mở ngăn tủ phần cứng cho người dùng cất đồ
       if (targetLockerId) {
@@ -282,7 +282,7 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
         f.category,
         f.found_location,
         f.found_at,
-        f.status,
+        CASE WHEN f.status = 'stored' THEN 'in_locker' ELSE f.status END as status,
         f.tracking_code,
         f.image_url,
         f.slot_id,
@@ -374,7 +374,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         f.category,
         f.found_location,
         f.found_at,
-        f.status,
+        CASE WHEN f.status = 'stored' THEN 'in_locker' ELSE f.status END as status,
         f.tracking_code,
         f.image_url,
         f.slot_id,

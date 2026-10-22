@@ -132,6 +132,48 @@ export const AdminReportsView: React.FC = () => {
     }
   };
 
+  const handleUpdateLostReportStatus = async (id: number, status: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/lost-reports/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        message.success(data.message || 'Cập nhật thành công');
+        void fetchLostReports();
+      } else {
+        message.error(data.message || 'Cập nhật thất bại');
+      }
+    } catch (err) {
+      message.error('Lỗi kết nối khi cập nhật');
+    }
+  };
+
+  const handleDeleteLostReport = async (id: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/lost-reports/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        message.success('Đã xóa báo cáo mất đồ');
+        void fetchLostReports();
+      } else {
+        message.error(data.message || 'Xóa thất bại');
+      }
+    } catch (err) {
+      message.error('Lỗi kết nối khi xóa');
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -285,8 +327,15 @@ export const AdminReportsView: React.FC = () => {
                         Địa điểm mất: {report.lost_location}
                       </div>
                     </div>
-                    <Tag color={report.status === 'pending' ? 'processing' : 'default'} style={{ margin: 0 }}>
-                      {report.status === 'pending' ? 'Đang chờ' : report.status}
+                    <Tag 
+                      color={
+                        report.status === 'found' ? 'success' :
+                        report.status === 'closed' ? 'default' : 'processing'
+                      } 
+                      style={{ margin: 0, borderRadius: 6 }}
+                    >
+                      {report.status === 'found' ? 'Đã tìm thấy' :
+                       report.status === 'closed' ? 'Đã đóng' : 'Đang tìm kiếm'}
                     </Tag>
                   </div>
 
@@ -296,9 +345,47 @@ export const AdminReportsView: React.FC = () => {
                     </div>
                   )}
 
-                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Liên hệ: {report.reporter_contact || 'Không để lại'}</span>
+                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <span>Liên hệ: <strong style={{ color: '#0f172a' }}>{report.reporter_contact || 'Không để lại'}</strong></span>
                     <span>Báo lúc: {new Date(report.created_at).toLocaleDateString('vi-VN')}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                    {report.status !== 'found' && (
+                      <Button
+                        size="small"
+                        icon={<CheckOutlined />}
+                        onClick={() => handleUpdateLostReportStatus(report.id, 'found')}
+                        style={{ borderRadius: 6, color: '#16a34a', borderColor: '#86efac' }}
+                      >
+                        Đã tìm thấy
+                      </Button>
+                    )}
+                    {report.status !== 'closed' && (
+                      <Button
+                        size="small"
+                        onClick={() => handleUpdateLostReportStatus(report.id, 'closed')}
+                        style={{ borderRadius: 6 }}
+                      >
+                        Đóng báo cáo
+                      </Button>
+                    )}
+                    <Popconfirm
+                      title="Xóa báo cáo mất đồ"
+                      description="Bạn có chắc chắn muốn xóa bản ghi báo mất này không?"
+                      onConfirm={() => handleDeleteLostReport(report.id)}
+                      okText="Xóa"
+                      cancelText="Hủy"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button
+                        size="small"
+                        danger
+                        style={{ borderRadius: 6 }}
+                      >
+                        Xóa
+                      </Button>
+                    </Popconfirm>
                   </div>
                 </div>
               ))}

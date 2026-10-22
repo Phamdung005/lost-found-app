@@ -90,6 +90,7 @@ export async function runBusinessMigration() {
       ALTER TABLE found_items 
       ADD COLUMN IF NOT EXISTS slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS locker_slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL;
+      UPDATE found_items SET status = 'in_locker' WHERE status = 'stored';
     `);
 
     // 4. Tạo bảng lost_reports
