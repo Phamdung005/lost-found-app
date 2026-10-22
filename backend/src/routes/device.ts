@@ -504,6 +504,15 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
     }
 
     const slotCode = claim.slot_code || "A01";
+    const { slot_code: reqSlotCode } = req.body;
+    if (reqSlotCode && reqSlotCode.toString().trim().toUpperCase() !== slotCode.toUpperCase()) {
+      await client.query("ROLLBACK");
+      res.status(400).json({
+        success: false,
+        message: `OTP nay thuoc ngan ${slotCode}, khong phai ngan ${reqSlotCode}`,
+      });
+      return;
+    }
     const slotId = claim.locker_slot_id;
 
     // Đánh dấu yêu cầu đã hoàn tất
