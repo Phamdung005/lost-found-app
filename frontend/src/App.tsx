@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { App as AntApp, Button, Space } from 'antd';
+import { App as AntApp, Button, Space, Spin } from 'antd';
 import {
   SafetyCertificateOutlined,
   AppleOutlined,
@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from './context/AuthContext';
 import { BottomNavBar } from './components/BottomNavBar';
+import { LoginGatewayView } from './views/LoginGatewayView';
 import { UserHomeView } from './views/UserHomeView';
 import { UserSearchView } from './views/UserSearchView';
 import { UserReportView } from './views/UserReportView';
@@ -21,7 +22,7 @@ import { PWAInstallGuideModal } from './components/PWAInstallGuideModal';
 import './App.css';
 
 export function App() {
-  const { user, isAdmin, isAuthenticated } = useAuth();
+  const { user, isAdmin, isAuthenticated, loading } = useAuth();
   
   // Tab state (defaults to 'home' for user, 'admin_overview' for admin)
   const [currentTab, setCurrentTab] = useState<string>(isAdmin ? 'admin_overview' : 'home');
@@ -79,6 +80,33 @@ export function App() {
     setAuthModalOpen(true);
   };
 
+  // 1. Loading state while verifying token on startup
+  if (loading) {
+    return (
+      <AntApp>
+        <div className="mobile-app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+          <Spin size="large" tip="Đang khởi động FindBox..." />
+        </div>
+      </AntApp>
+    );
+  }
+
+  // 2. Authentication Gateway: Bắt buộc đăng nhập trước khi sử dụng hệ thống
+  if (!isAuthenticated) {
+    return (
+      <AntApp>
+        <div className="mobile-app-container" style={{ minHeight: '100vh', justifyContent: 'center' }}>
+          <LoginGatewayView onOpenPwaGuide={() => setPwaGuideOpen(true)} />
+          <PWAInstallGuideModal
+            open={pwaGuideOpen}
+            onCancel={() => setPwaGuideOpen(false)}
+          />
+        </div>
+      </AntApp>
+    );
+  }
+
+  // 3. Main Authenticated App
   return (
     <AntApp>
       <div className="mobile-app-container">
@@ -107,36 +135,25 @@ export function App() {
               PWA
             </Button>
 
-            {isAuthenticated ? (
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: isAdmin ? '#9333ea' : '#2563eb',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                }}
-                onClick={() => setCurrentTab(isAdmin ? 'admin_account' : 'profile')}
-                title="Tài khoản"
-              >
-                {user?.full_name ? user.full_name[0].toUpperCase() : 'U'}
-              </div>
-            ) : (
-              <Button
-                type="primary"
-                size="small"
-                onClick={() => handleOpenAuthModal('login')}
-                style={{ borderRadius: 8, fontSize: 12, height: 32 }}
-              >
-                Đăng nhập
-              </Button>
-            )}
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: isAdmin ? '#9333ea' : '#2563eb',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: 'pointer',
+              }}
+              onClick={() => setCurrentTab(isAdmin ? 'admin_account' : 'profile')}
+              title="Tài khoản"
+            >
+              {user?.full_name ? user.full_name[0].toUpperCase() : 'U'}
+            </div>
           </Space>
         </header>
 

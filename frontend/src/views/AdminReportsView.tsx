@@ -19,7 +19,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
-const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api';
+import { API_BASE } from '../config/api';
 
 const { Title, Text } = Typography;
 

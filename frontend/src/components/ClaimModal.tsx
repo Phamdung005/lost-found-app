@@ -12,7 +12,7 @@ interface ClaimModalProps {
   onSuccess: () => void;
 }
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api';
+import { API_BASE } from '../config/api';
 
 export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, onSuccess }) => {
   const [form] = Form.useForm();

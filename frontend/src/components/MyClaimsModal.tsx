@@ -29,7 +29,7 @@ interface MyClaimsModalProps {
   onSuccess: () => void;
 }
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config/api';
 
 export const MyClaimsModal: React.FC<MyClaimsModalProps> = ({ open, onCancel, onSuccess }) => {
   const [claims, setClaims] = useState<any[]>([]);

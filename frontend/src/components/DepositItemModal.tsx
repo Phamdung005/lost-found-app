@@ -31,7 +31,7 @@ interface DepositItemModalProps {
   onSuccess: () => void;
 }
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config/api';
 
 export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCancel, onSuccess }) => {
   const [form] = Form.useForm();
