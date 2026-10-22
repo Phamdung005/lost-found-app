@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Tag, Button, Spin } from 'antd';
+import { Typography, Tag, Button, Spin, Space } from 'antd';
 import {
   SafetyCertificateOutlined,
   ThunderboltOutlined,
@@ -77,24 +77,20 @@ export const AdminOverviewView: React.FC<AdminOverviewViewProps> = ({ onNavigate
             Tổng quan công việc và trạng thái tủ thông minh.
           </Text>
         </div>
-        <Button
-          size="small"
-          icon={<ReloadOutlined />}
-          onClick={fetchDashboardData}
-          loading={loading}
-          style={{ borderRadius: 8 }}
-        />
+        <Space>
+          <Tag color={deviceStatus?.is_online ? 'success' : 'default'} style={{ borderRadius: 6, margin: 0 }}>
+            {deviceStatus?.is_online ? 'ESP32 Online' : 'ESP32 Offline'}
+          </Tag>
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={fetchDashboardData}
+            loading={loading}
+            style={{ borderRadius: 8 }}
+          />
+        </Space>
       </div>
 
-      {/* Simulation Warning Banner if in simulation mode */}
-      {deviceStatus?.simulation_mode && (
-        <div className="simulation-mode-banner">
-          <span className="simulation-tag">MÔ PHỎNG</span>
-          <div style={{ fontSize: 12, color: '#92400e' }}>
-            Hệ thống đang chạy <b>Chế độ mô phỏng</b> (Không kích hoạt relay/servo phần cứng).
-          </div>
-        </div>
-      )}
 
       {/* 3 Main Stat Cards (Clean, Mobile-First) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>

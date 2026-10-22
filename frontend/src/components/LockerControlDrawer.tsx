@@ -8,7 +8,6 @@ import {
   Button,
   Space,
   Typography,
-  Switch,
   Alert,
   Table,
   Badge,
@@ -94,27 +93,6 @@ export const LockerControlDrawer: React.FC<LockerControlDrawerProps> = ({
     }
   }, [open, token]);
 
-  // Toggle Chế độ Mô phỏng
-  const handleToggleSimulation = async (enabled: boolean) => {
-    try {
-      const res = await fetch(`${API_BASE}/device/simulation-mode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ enabled }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        message.success(data.message);
-        await refreshAll();
-      }
-    } catch {
-      message.error('Lỗi khi chuyển đổi chế độ mô phỏng');
-    }
-  };
-
   // Gửi lệnh mở ngăn tủ
   const handleOpenSlot = async (slotCode: string) => {
     setCommandIssuing(slotCode);
@@ -138,22 +116,6 @@ export const LockerControlDrawer: React.FC<LockerControlDrawerProps> = ({
       }
 
       message.success(data.message);
-
-      // Nếu đang bật Chế độ Mô phỏng, tự động gọi simulate-execute sau 1s để giả lập ESP32 phản hồi
-      if (deviceData?.locker?.is_simulation_mode && data.data?.command?.id) {
-        setTimeout(async () => {
-          try {
-            await fetch(`${API_BASE}/device/simulate-execute/${data.data.command.id}`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            void refreshAll();
-          } catch {
-            // ignore
-          }
-        }, 1000);
-      }
-
       await refreshAll();
     } catch (err: any) {
       message.error(err.message || 'Lỗi gửi lệnh');
@@ -165,7 +127,6 @@ export const LockerControlDrawer: React.FC<LockerControlDrawerProps> = ({
   const locker = deviceData?.locker;
   const slots = deviceData?.slots || [];
   const isOnline = !!locker?.is_online;
-  const isSimulation = !!locker?.is_simulation_mode;
 
   const columns = [
     {
@@ -234,39 +195,28 @@ export const LockerControlDrawer: React.FC<LockerControlDrawerProps> = ({
       onClose={onClose}
       open={open}
     >
-      {/* Banner cảnh báo chế độ mô phỏng */}
-      {isSimulation ? (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-          message="HỆ THỐNG ĐANG BẬT CHẾ ĐỘ MÔ PHỎNG (SIMULATION MODE)"
-          description="Các lệnh điều khiển servo sẽ được giả lập thành công để phục vụ thuyết trình / kiểm thử giao diện khi chưa cắm nguồn ESP32 thực tế. Các thao tác đều được đánh dấu [MÔ PHỎNG] rõ ràng."
-        />
-      ) : (
-        <Alert
-          type={isOnline ? 'success' : 'error'}
-          showIcon
-          style={{ marginBottom: 16 }}
-          message={isOnline ? 'ESP32 ĐANG KẾT NỐI TRỰC TUYẾN' : 'ESP32 HIỆN ĐANG NGOẠI TUYẾN'}
-          description={
-            isOnline
-              ? `Thiết bị gửi heartbeat gần nhất lúc ${new Date(locker?.last_heartbeat).toLocaleTimeString('vi-VN')}. Lệnh mở ngăn sẽ được truyền ngay lập tức qua Wi-Fi.`
-              : 'Thiết bị ESP32 chưa gửi heartbeat hoặc đang mất nguồn. Nếu bạn muốn demo khi chưa có phần cứng, hãy gạt công tắc "Chế độ Mô phỏng" bên dưới.'
-          }
-        />
-      )}
+      <Alert
+        type={isOnline ? 'success' : 'error'}
+        showIcon
+        style={{ marginBottom: 16 }}
+        message={isOnline ? 'PHẦN CỨNG ESP32 ĐANG TRỰC TUYẾN' : 'PHẦN CỨNG ESP32 HIỆN ĐANG NGOẠI TUYẾN'}
+        description={
+          isOnline
+            ? `Thiết bị gửi heartbeat gần nhất lúc ${locker?.last_heartbeat ? new Date(locker.last_heartbeat).toLocaleTimeString('vi-VN') : 'Vừa xong'}. Lệnh mở ngăn sẽ được truyền trực tiếp qua Wi-Fi.`
+            : 'Hệ thống đang chờ tín hiệu heartbeat từ vi điều khiển ESP32. Hãy đảm bảo ESP32 đã cấp nguồn và kết nối Wi-Fi.'
+        }
+      />
 
-      {/* Thông tin phần cứng & Switch chế độ mô phỏng */}
+      {/* Thông tin phần cứng */}
       <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
         <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} sm={14}>
+          <Col xs={24}>
             <Space direction="vertical" size={4}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Text strong style={{ fontSize: 16 }}>Tủ {locker?.locker_code || 'L-001'}</Text>
                 <Badge
                   status={isOnline ? 'success' : 'error'}
-                  text={isOnline ? 'Online (ESP32)' : 'Offline'}
+                  text={isOnline ? 'Phần cứng Online (ESP32)' : 'Chờ kết nối ESP32'}
                 />
                 {locker?.wifi_rssi && (
                   <Tag icon={<WifiOutlined />} color="cyan">
@@ -275,19 +225,8 @@ export const LockerControlDrawer: React.FC<LockerControlDrawerProps> = ({
                 )}
               </div>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Firmware: {locker?.firmware_version || 'v1.2.0'} · IP: {locker?.ip_address || 'Chưa ghi nhận'} · Chân Servo: GPIO 18 (A01), GPIO 19 (A02)
+                Firmware: {locker?.firmware_version || 'v1.3.0'} · IP: {locker?.ip_address || 'Chưa ghi nhận'} · Điều khiển: Servo SG90 GPIO 18 (A01), GPIO 19 (A02)
               </Text>
-            </Space>
-          </Col>
-          <Col xs={24} sm={10} style={{ textAlign: 'right' }}>
-            <Space align="center">
-              <Text strong style={{ fontSize: 13 }}>Chế độ Mô phỏng:</Text>
-              <Switch
-                checked={isSimulation}
-                onChange={handleToggleSimulation}
-                checkedChildren="BẬT"
-                unCheckedChildren="TẮT"
-              />
             </Space>
           </Col>
         </Row>
