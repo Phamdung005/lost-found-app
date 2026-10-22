@@ -156,8 +156,68 @@ export async function runBusinessMigration() {
       CREATE INDEX IF NOT EXISTS idx_claims_claim_code ON found_item_claims(claim_code);
     `);
 
+    // 8. Tạo bảng notifications nếu chưa tồn tại
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(20) DEFAULT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        type VARCHAR(30) DEFAULT 'info',
+        is_read BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_role ON notifications(role);
+      CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+    `);
+
+    // 9. Quản lý dọn dẹp dữ liệu thử nghiệm (Giữ lại thông tin ngăn tủ và tài khoản người dùng)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_migrations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) UNIQUE NOT NULL,
+        executed_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    const checkMigration = await client.query(
+      "SELECT 1 FROM system_migrations WHERE name = 'clear_test_data_2026_10_23'"
+    );
+
+    if (checkMigration.rows.length === 0) {
+      console.log("Running one-time test data cleanup: clearing items, claims, reports, logs...");
+      await client.query(`
+        TRUNCATE TABLE found_item_claims CASCADE;
+        TRUNCATE TABLE found_items CASCADE;
+        TRUNCATE TABLE lost_reports CASCADE;
+        TRUNCATE TABLE access_logs CASCADE;
+        TRUNCATE TABLE locker_commands CASCADE;
+        TRUNCATE TABLE notifications CASCADE;
+        UPDATE locker_slots 
+        SET status = 'empty', 
+            occupancy_status = 'empty', 
+            door_status = 'closed', 
+            device_status = 'online',
+            updated_at = now();
+      `);
+
+      await client.query(
+        "INSERT INTO system_migrations (name) VALUES ('clear_test_data_2026_10_23')"
+      );
+
+      // Thêm thông báo chào mừng khởi động hệ thống sạch
+      await client.query(`
+        INSERT INTO notifications (role, title, message, type)
+        VALUES ('admin', '🚀 Hệ thống đã sẵn sàng', 'Dữ liệu thử nghiệm đã được làm sạch thành công. Các ngăn tủ A01, A02 đã sẵn sàng hoạt động.', 'success')
+      `);
+
+      console.log("One-time test data cleanup completed successfully.");
+    }
+
     await client.query("COMMIT");
-    console.log("Business schema migration completed successfully (lockers, slots, items created).");
+    console.log("Business schema migration completed successfully (lockers, slots, items, notifications ready).");
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Business migration failed:", err);

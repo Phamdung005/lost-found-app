@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { App as AntApp, Button, Space, Spin } from 'antd';
+import { App as AntApp, Button, Space, Spin, Badge } from 'antd';
 import {
   SafetyCertificateOutlined,
   AppleOutlined,
   ThunderboltOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 import { useAuth } from './context/AuthContext';
 import { BottomNavBar } from './components/BottomNavBar';
@@ -19,6 +20,7 @@ import { AdminAccountView } from './views/AdminAccountView';
 import { AuthModal } from './components/AuthModal';
 import { ClaimModal } from './components/ClaimModal';
 import { PWAInstallGuideModal } from './components/PWAInstallGuideModal';
+import { NotificationDrawer } from './components/NotificationDrawer';
 import './App.css';
 
 export function App() {
@@ -38,6 +40,8 @@ export function App() {
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [claimTargetItem, setClaimTargetItem] = useState<any | null>(null);
   const [pwaGuideOpen, setPwaGuideOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   // Sync tab if user role changes
   React.useEffect(() => {
@@ -124,7 +128,7 @@ export function App() {
             </div>
           </div>
 
-          <Space size={8}>
+          <Space size={10}>
             <Button
               type="text"
               size="small"
@@ -134,6 +138,17 @@ export function App() {
             >
               PWA
             </Button>
+
+            <Badge count={unreadNotifCount} size="small" offset={[-2, 4]}>
+              <Button
+                type="text"
+                shape="circle"
+                icon={<BellOutlined style={{ fontSize: 18, color: '#334155' }} />}
+                onClick={() => setNotificationOpen(true)}
+                title="Thông báo"
+                style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              />
+            </Badge>
 
             <div
               style={{
@@ -237,6 +252,12 @@ export function App() {
         <PWAInstallGuideModal
           open={pwaGuideOpen}
           onCancel={() => setPwaGuideOpen(false)}
+        />
+
+        <NotificationDrawer
+          open={notificationOpen}
+          onClose={() => setNotificationOpen(false)}
+          onUnreadCountChange={setUnreadNotifCount}
         />
       </div>
     </AntApp>

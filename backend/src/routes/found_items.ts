@@ -5,6 +5,7 @@ import { pool } from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = Router();
 
@@ -227,6 +228,50 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       has_slot: !!finalSlotId,
       slot_code: targetSlotCode,
     });
+
+    // Trích xuất userId nếu có token
+    let creatorUserId: number | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      try {
+        const parts = authHeader.split(" ");
+        const token = parts[1];
+        if (token) {
+          const secret = process.env.JWT_SECRET || "findbox_super_secret_jwt_key_2026_demo";
+          const decoded = jwt.verify(token, secret) as any;
+          if (decoded?.id) creatorUserId = Number(decoded.id);
+        }
+      } catch {}
+    }
+
+    // Gửi thông báo cho Admin
+    if (finalSlotId) {
+      await createNotification({
+        role: "admin",
+        title: `📦 Đồ mới gửi vào ngăn ${targetSlotCode}`,
+        message: `Món đồ "${createdItem.item_name}" vừa được cất vào ngăn ${targetSlotCode}. Mã theo dõi: ${trackingCode}`,
+        type: "locker",
+      });
+    } else {
+      await createNotification({
+        role: "admin",
+        title: "📝 Thông tin đồ nhặt được mới",
+        message: `Người dùng báo nhặt được "${createdItem.item_name}" tại "${createdItem.found_location}". Mã: ${trackingCode}`,
+        type: "info",
+      });
+    }
+
+    // Gửi thông báo cho người tìm thấy (nếu có tài khoản)
+    if (creatorUserId) {
+      await createNotification({
+        userId: creatorUserId,
+        title: finalSlotId ? "✅ Gửi đồ vào tủ thành công" : "✅ Đã ghi nhận thông tin đồ nhặt",
+        message: finalSlotId
+          ? `Bạn đã gửi thành công "${createdItem.item_name}" vào ngăn ${targetSlotCode}. Mã theo dõi: ${trackingCode}`
+          : `Hệ thống đã lưu thông tin món đồ "${createdItem.item_name}". Cảm ơn hành động đẹp của bạn!`,
+        type: "success",
+      });
+    }
 
     res.status(201).json({
       success: true,

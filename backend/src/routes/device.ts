@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = Router();
 
@@ -368,6 +369,15 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
       release_item: !!release_item,
     });
 
+    await createNotification({
+      role: "admin",
+      title: release_item ? `⚡ Lệnh mở ngăn ${slot_code} & Lấy đồ ra` : `🔓 Lệnh mở ngăn ${slot_code} kiểm tra`,
+      message: release_item
+        ? `Admin đã mở ngăn ${slot_code} và đánh dấu đồ vật đã trao trả. Ngăn tủ đã về Trống.`
+        : `Admin đã gửi lệnh mở ngăn ${slot_code} vào hàng đợi ESP32 để kiểm tra kỹ thuật.`,
+      type: release_item ? "warning" : "info",
+    });
+
     let successMsg = `Đã gửi lệnh mở ngăn ${slot_code} vào hàng đợi ESP32`;
     if (release_item) {
       successMsg = `Đã mở ngăn ${slot_code} và đánh dấu đồ vật đã trao trả (ngăn tủ trở về Trống)`;
@@ -588,6 +598,24 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
     }
 
     await client.query("COMMIT");
+
+    // Thông báo cho User
+    if (claim.user_id) {
+      await createNotification({
+        userId: claim.user_id,
+        title: "🎁 Mở tủ tại Keypad thành công",
+        message: `Mã OTP [${inputCode}] đã được nhập tại bàn phím tủ. Ngăn ${slotCode} đã mở để bạn lấy lại "${claim.item_name}".`,
+        type: "success",
+      });
+    }
+
+    // Thông báo cho Admin
+    await createNotification({
+      role: "admin",
+      title: `🔑 Mở tủ bằng Keypad thành công (${slotCode})`,
+      message: `Người dùng vừa nhập OTP [${inputCode}] tại bàn phím phần cứng. Ngăn ${slotCode} đã mở và trao trả món đồ "${claim.item_name}".`,
+      type: "locker",
+    });
 
     res.json({
       success: true,

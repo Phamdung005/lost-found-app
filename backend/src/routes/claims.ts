@@ -6,6 +6,7 @@ import { pool } from "../db.js";
 import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = Router();
 
@@ -74,15 +75,35 @@ router.post("/", authenticateToken, async (req: AuthenticatedRequest, res: Respo
       [Number(found_item_id), userId, proof_description.trim(), proof_contact || null]
     );
 
+    const newClaim = result.rows[0];
+
     await logAudit(userId!, "CLAIM_REQUESTED", {
-      claim_id: result.rows[0].id,
+      claim_id: newClaim.id,
       found_item_id: Number(found_item_id),
     });
+
+    // Thông báo cho Admin
+    await createNotification({
+      role: "admin",
+      title: "🙋 Yêu cầu nhận đồ mới",
+      message: `Người dùng ${req.user?.email || "khách hàng"} vừa gửi yêu cầu nhận lại "${item.item_name}". Vui lòng đối chiếu và xác minh.`,
+      type: "claim",
+    });
+
+    // Thông báo cho Người yêu cầu
+    if (userId) {
+      await createNotification({
+        userId,
+        title: "⏳ Đã gửi yêu cầu nhận đồ",
+        message: `Yêu cầu nhận lại "${item.item_name}" đã gửi thành công. Quản trị viên đang tiến hành xác minh thông tin của bạn.`,
+        type: "info",
+      });
+    }
 
     res.status(201).json({
       success: true,
       message: "Đã gửi yêu cầu nhận đồ thành công. Quản trị viên sẽ sớm đối chiếu và xác minh.",
-      data: result.rows[0],
+      data: newClaim,
     });
   } catch (error) {
     console.error("Create claim error:", error);
@@ -192,7 +213,14 @@ router.post("/:id/verify", authenticateToken, requireAdmin, async (req: Authenti
     }
 
     const claimCheck = await pool.query(
-      "SELECT id, found_item_id, user_id, status FROM found_item_claims WHERE id = $1",
+      `SELECT c.id, c.found_item_id, c.user_id, c.status,
+              f.item_name, s.slot_code, l.location as locker_location, l.locker_code, u.email as user_email
+       FROM found_item_claims c
+       JOIN found_items f ON c.found_item_id = f.id
+       LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
+       LEFT JOIN lockers l ON s.locker_id = l.id
+       LEFT JOIN users u ON c.user_id = u.id
+       WHERE c.id = $1`,
       [claimId]
     );
 
@@ -219,6 +247,22 @@ router.post("/:id/verify", authenticateToken, requireAdmin, async (req: Authenti
       );
 
       await logAudit(adminId!, "CLAIM_REJECTED", { claim_id: claimId, reason: rejection_reason });
+
+      // Thông báo cho User
+      await createNotification({
+        userId: claim.user_id,
+        title: "❌ Yêu cầu nhận đồ không được duyệt",
+        message: `Yêu cầu nhận lại "${claim.item_name}" của bạn không được phê duyệt. Lý do: ${rejection_reason || "Thông tin đối chiếu không trùng khớp"}.`,
+        type: "warning",
+      });
+
+      // Thông báo cho Admin
+      await createNotification({
+        role: "admin",
+        title: "🚫 Đã từ chối yêu cầu nhận đồ",
+        message: `Admin đã từ chối yêu cầu nhận "${claim.item_name}" của ${claim.user_email || "người dùng"}.`,
+        type: "info",
+      });
 
       res.json({
         success: true,
@@ -247,6 +291,24 @@ router.post("/:id/verify", authenticateToken, requireAdmin, async (req: Authenti
     await logAudit(adminId!, "CLAIM_APPROVED", {
       claim_id: claimId,
       expires_at: expiresAt,
+    });
+
+    // Thông báo cho User với mã OTP và vị trí ngăn
+    const slotName = claim.slot_code ? `Ngăn ${claim.slot_code}` : "Tủ đồ";
+    const lockerName = claim.locker_code || "L-001";
+    await createNotification({
+      userId: claim.user_id,
+      title: "🎉 Yêu cầu nhận đồ ĐÃ ĐƯỢC DUYỆT!",
+      message: `Yêu cầu nhận "${claim.item_name}" đã được duyệt! Mã OTP: [${otpCode}] (hiệu lực 30 phút). Vui lòng đến ${lockerName} - ${slotName} để mở tủ lấy đồ.`,
+      type: "success",
+    });
+
+    // Thông báo cho Admin
+    await createNotification({
+      role: "admin",
+      title: "✅ Đã duyệt yêu cầu nhận đồ",
+      message: `Admin đã duyệt yêu cầu nhận "${claim.item_name}" cho ${claim.user_email || "người dùng"}. Cấp OTP [${otpCode}] mở ${slotName}.`,
+      type: "claim",
     });
 
     res.json({
@@ -385,6 +447,24 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
       claim_id: claim.id,
       item_name: claim.item_name,
       slot_code: claim.slot_code,
+    });
+
+    // Thông báo cho User
+    if (claim.user_id) {
+      await createNotification({
+        userId: claim.user_id,
+        title: "🎁 Nhận lại đồ thành công",
+        message: `Ngăn ${claim.slot_code || "lưu trữ"} đã mở. Bạn đã nhận lại món đồ "${claim.item_name}". Cảm ơn bạn đã tin tưởng FindBox!`,
+        type: "success",
+      });
+    }
+
+    // Thông báo cho Admin
+    await createNotification({
+      role: "admin",
+      title: `🔓 Đồ vật đã trao trả (${claim.slot_code || "Ngăn tủ"})`,
+      message: `Người dùng đã mở ngăn ${claim.slot_code || ""} lấy lại "${claim.item_name}". Ngăn tủ đã chuyển sang trạng thái Trống.`,
+      type: "locker",
     });
 
     res.json({
