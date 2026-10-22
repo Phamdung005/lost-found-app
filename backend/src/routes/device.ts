@@ -233,7 +233,7 @@ router.get("/status", async (_req: Request, res: Response): Promise<void> => {
         id, locker_code, location, status, last_heartbeat, 
         ip_address, firmware_version, wifi_rssi, is_simulation_mode,
         CASE 
-          WHEN last_heartbeat IS NOT NULL AND last_heartbeat > (now() - INTERVAL '35 seconds') THEN true
+          WHEN last_heartbeat IS NOT NULL AND last_heartbeat > (now() - INTERVAL '60 seconds') THEN true
           ELSE false
         END AS is_online
       FROM lockers
@@ -263,6 +263,11 @@ router.get("/status", async (_req: Request, res: Response): Promise<void> => {
       success: true,
       data: {
         locker,
+        is_online: Boolean(locker.is_online),
+        last_heartbeat: locker.last_heartbeat,
+        last_seen_at: locker.last_heartbeat,
+        ip_address: locker.ip_address,
+        wifi_rssi: locker.wifi_rssi,
         slots: slotsRes.rows,
         hardware_info: {
           microcontroller: "ESP32",

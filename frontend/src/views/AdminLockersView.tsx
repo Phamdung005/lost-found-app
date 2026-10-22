@@ -3,7 +3,6 @@ import {
   Typography,
   Tag,
   Button,
-  Switch,
   message,
   Popconfirm,
   Modal,
@@ -31,7 +30,6 @@ export const AdminLockersView: React.FC = () => {
   const [slots, setSlots] = useState<any[]>([]);
   const [commandHistory, setCommandHistory] = useState<any[]>([]);
   const [unlockingSlot, setUnlockingSlot] = useState<string | null>(null);
-  const [togglingSim, setTogglingSim] = useState(false);
 
   // Modal thêm ngăn tủ
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -154,30 +152,6 @@ export const AdminLockersView: React.FC = () => {
     }
   };
 
-  // Toggle Simulation Mode
-  const handleToggleSimulation = async (enabled: boolean) => {
-    setTogglingSim(true);
-    try {
-      const res = await fetch(`${API_BASE}/device/simulation-mode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ enabled }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        message.success(data.message);
-        await fetchLockerData();
-      }
-    } catch (err) {
-      message.error('Không thể đổi chế độ mô phỏng');
-    } finally {
-      setTogglingSim(false);
-    }
-  };
-
   // Issue Unlock Command for slot A01 or A02
   const handleUnlockSlot = async (slotCode: string) => {
     setUnlockingSlot(slotCode);
@@ -209,8 +183,13 @@ export const AdminLockersView: React.FC = () => {
     }
   };
 
-  const isOnline = deviceStatus?.is_online;
-  const isSimulation = deviceStatus?.simulation_mode;
+  const isOnline = Boolean(deviceStatus?.is_online ?? deviceStatus?.locker?.is_online);
+  const lastHeartbeat =
+    deviceStatus?.last_heartbeat ??
+    deviceStatus?.locker?.last_heartbeat ??
+    deviceStatus?.last_seen_at;
+  const ipAddress = deviceStatus?.ip_address ?? deviceStatus?.locker?.ip_address;
+  const wifiRssi = deviceStatus?.wifi_rssi ?? deviceStatus?.locker?.wifi_rssi;
 
   return (
     <div>
@@ -220,7 +199,7 @@ export const AdminLockersView: React.FC = () => {
             Quản lý Tủ & Ngăn IoT
           </Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
-            Tủ thông minh L-001 (Điều khiển servo & cảm biến cửa).
+            Tủ thông minh L-001 (Điều khiển servo & cảm biến cửa phần cứng).
           </Text>
         </div>
         <Button
@@ -232,36 +211,6 @@ export const AdminLockersView: React.FC = () => {
         />
       </div>
 
-      {/* Simulation Banner & Toggle */}
-      <div
-        className="card-clean"
-        style={{
-          background: isSimulation ? '#fffbeb' : '#f8fafc',
-          borderColor: isSimulation ? '#fde68a' : '#e2e8f0',
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="simulation-tag" style={{ background: isSimulation ? '#f59e0b' : '#64748b' }}>
-                {isSimulation ? 'CHẾ ĐỘ MÔ PHỎNG: BẬT' : 'CHẾ ĐỘ THẬT (PHẦN CỨNG)'}
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-              {isSimulation
-                ? 'Khi chưa cắm ESP32 thật, hệ thống sẽ ghi nhận lệnh mô phỏng phục vụ chấm điểm/demo.'
-                : 'Lệnh điều khiển servo sẽ gửi trực tiếp đến phần cứng ESP32 qua Wi-Fi.'}
-            </div>
-          </div>
-          <Switch
-            checked={isSimulation}
-            onChange={handleToggleSimulation}
-            loading={togglingSim}
-          />
-        </div>
-      </div>
-
       {/* Device Connection Status Bar */}
       <div
         className="card-clean"
@@ -271,20 +220,23 @@ export const AdminLockersView: React.FC = () => {
           alignItems: 'center',
           marginBottom: 16,
           background: '#ffffff',
+          borderLeft: isOnline ? '4px solid #16a34a' : '4px solid #94a3b8',
         }}
       >
         <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>Trạng thái kết nối ESP32:</div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>
-            {deviceStatus?.last_seen_at
-              ? `Nhịp tim gần nhất: ${new Date(deviceStatus.last_seen_at).toLocaleTimeString('vi-VN')}`
-              : 'Chưa nhận được tín hiệu heartbeat'}
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+            Trạng thái kết nối Phần cứng ESP32:
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+            {lastHeartbeat
+              ? `Nhịp tim gần nhất: ${new Date(lastHeartbeat).toLocaleTimeString('vi-VN')} (${new Date(lastHeartbeat).toLocaleDateString('vi-VN')})${ipAddress ? ` • IP: ${ipAddress}` : ''}${wifiRssi ? ` • Sóng: ${wifiRssi}dBm` : ''}`
+              : 'Chưa nhận được tín hiệu heartbeat từ ESP32'}
           </div>
         </div>
         <Tag
           icon={isOnline ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
           color={isOnline ? 'success' : 'default'}
-          style={{ padding: '4px 8px', borderRadius: 6, fontSize: 12 }}
+          style={{ padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
         >
           {isOnline ? 'ESP32 Trực tuyến' : 'ESP32 Ngoại tuyến'}
         </Tag>
@@ -406,7 +358,7 @@ export const AdminLockersView: React.FC = () => {
                     className="slot-meta-val"
                     style={{ color: doorState === 'open' ? '#2563eb' : '#64748b' }}
                   >
-                    {doorState === 'open' ? '🚪 Cửa đang MỞ' : '🔒 Cửa đang ĐÓNG'}
+                    {doorState === 'open' ? 'Cửa đang MỞ' : 'Cửa đang ĐÓNG'}
                   </span>
                 </div>
               </div>
@@ -414,11 +366,7 @@ export const AdminLockersView: React.FC = () => {
               {/* Nút Mở khóa Servo */}
               <Popconfirm
                 title={`Xác nhận mở ngăn ${slotCode}?`}
-                description={
-                  isSimulation
-                    ? 'Hệ thống sẽ thực hiện lệnh mô phỏng mở servo.'
-                    : 'Hệ thống sẽ gửi lệnh xoay Servo SG90 trên ESP32.'
-                }
+                description="Hệ thống sẽ gửi lệnh xoay Servo SG90 trên ESP32 để mở chốt."
                 onConfirm={() => handleUnlockSlot(slotCode)}
                 okText="Mở ngăn"
                 cancelText="Hủy"
@@ -432,11 +380,11 @@ export const AdminLockersView: React.FC = () => {
                     height: 42,
                     borderRadius: 10,
                     fontWeight: 600,
-                    background: isSimulation ? '#f59e0b' : '#2563eb',
-                    borderColor: isSimulation ? '#f59e0b' : '#2563eb',
+                    background: '#2563eb',
+                    borderColor: '#2563eb',
                   }}
                 >
-                  {isSimulation ? `Mô phỏng mở ngăn ${slotCode}` : `Mở ngăn ${slotCode} (Servo)`}
+                  Mở ngăn {slotCode} (Servo)
                 </Button>
               </Popconfirm>
             </div>
