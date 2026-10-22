@@ -193,17 +193,21 @@ router.post("/commands/:id/ack", authenticateDevice, async (req: Request, res: R
         [finalDoorStatus, command.slot_id]
       );
 
-      // Ghi nhật ký access_logs
-      await client.query(
-        `INSERT INTO access_logs (slot_id, action, actor, success, reason)
-         VALUES ($1, $2, 'ESP32_SERVO', $3, $4)`,
-        [
-          command.slot_id,
-          command.command_type,
-          isSuccess,
-          result_message || (isSuccess ? "Mở khóa thành công bằng servo" : "Lỗi servo"),
-        ]
-      );
+      // Ghi nhật ký access_logs (an toàn)
+      try {
+        await client.query(
+          `INSERT INTO access_logs (slot_id, action, actor, success, reason)
+           VALUES ($1, $2, 'ESP32_SERVO', $3, $4)`,
+          [
+            command.slot_id,
+            command.command_type,
+            isSuccess,
+            result_message || (isSuccess ? "Mở khóa thành công bằng servo" : "Lỗi servo"),
+          ]
+        );
+      } catch (logErr) {
+        console.warn("Could not insert access_log:", logErr);
+      }
     }
 
     await client.query("COMMIT");

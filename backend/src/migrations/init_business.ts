@@ -123,7 +123,20 @@ export async function runBusinessMigration() {
       );
     `);
 
-    // 6. Tạo indexes
+    // 6. Tạo bảng access_logs nếu chưa tồn tại
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS access_logs (
+        id SERIAL PRIMARY KEY,
+        slot_id INT,
+        action VARCHAR(50),
+        actor VARCHAR(50),
+        success BOOLEAN DEFAULT true,
+        reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+
+    // 7. Tạo indexes
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_found_items_category ON found_items(category);
       CREATE INDEX IF NOT EXISTS idx_found_items_status ON found_items(status);
