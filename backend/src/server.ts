@@ -5,8 +5,10 @@ import { pool } from "./db.js";
 import authRouter from "./routes/auth.js";
 import foundItemsRouter from "./routes/found_items.js";
 import claimsRouter from "./routes/claims.js";
+import deviceRouter from "./routes/device.js";
 import { runAuthMigration } from "./migrations/init_auth.js";
 import { runBusinessMigration } from "./migrations/init_business.js";
+import { runDeviceMigration } from "./migrations/init_device.js";
 import { authenticateToken, requireAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -21,6 +23,7 @@ app.use(express.json());
 app.use("/api/auth", authRouter);
 app.use("/api/found-items", foundItemsRouter);
 app.use("/api/claims", claimsRouter);
+app.use("/api/device", deviceRouter);
 
 app.get("/api/db-check", async (_req, res) => {
   try {
@@ -203,6 +206,7 @@ async function startServer() {
   try {
     await runAuthMigration();
     await runBusinessMigration();
+    await runDeviceMigration();
   } catch (err) {
     console.warn("Migration warning at start:", err);
   }

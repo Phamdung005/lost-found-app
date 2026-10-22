@@ -34,6 +34,7 @@ import {
   LogoutOutlined,
   LoginOutlined,
   KeyOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
@@ -41,6 +42,7 @@ import { DepositItemModal } from './components/DepositItemModal';
 import { FoundItemsList } from './components/FoundItemsList';
 import { MyClaimsModal } from './components/MyClaimsModal';
 import { AdminClaimsDrawer } from './components/AdminClaimsDrawer';
+import { LockerControlDrawer } from './components/LockerControlDrawer';
 import './App.css';
 
 const { Header, Sider, Content } = Layout;
@@ -85,6 +87,7 @@ function App() {
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [myClaimsOpen, setMyClaimsOpen] = useState(false);
   const [adminClaimsOpen, setAdminClaimsOpen] = useState(false);
+  const [lockerControlOpen, setLockerControlOpen] = useState(false);
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [submitting, setSubmitting] = useState(false);
   const [reportForm] = Form.useForm();
@@ -192,7 +195,17 @@ function App() {
             theme="dark"
             mode="inline"
             selectedKeys={[selectedMenu]}
-            onSelect={(e) => setSelectedMenu(e.key)}
+            onSelect={(e) => {
+              setSelectedMenu(e.key);
+              if (e.key === 'lockers') setLockerControlOpen(true);
+              if (e.key === 'admin_claims') setAdminClaimsOpen(true);
+              if (e.key === 'my_claims') setMyClaimsOpen(true);
+              if (e.key === 'items') {
+                const el = document.getElementById('found-items-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }
+              if (e.key === 'reports') setReportOpen(true);
+            }}
             items={
               isAdmin
                 ? [
@@ -200,6 +213,11 @@ function App() {
                       key: 'dashboard',
                       icon: <DashboardOutlined />,
                       label: 'Tổng quan hệ thống',
+                    },
+                    {
+                      key: 'lockers',
+                      icon: <ThunderboltOutlined />,
+                      label: 'Quản lý tủ & Ngăn IoT',
                     },
                     {
                       key: 'admin_claims',
@@ -355,13 +373,23 @@ function App() {
                 )}
 
                 {isAdmin && (
-                  <Button
-                    type="dashed"
-                    icon={<SafetyCertificateOutlined />}
-                    onClick={() => setAdminClaimsOpen(true)}
-                  >
-                    Duyệt nhận đồ (Admin)
-                  </Button>
+                  <>
+                    <Button
+                      type="primary"
+                      style={{ background: '#2563eb', borderColor: '#2563eb' }}
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => setLockerControlOpen(true)}
+                    >
+                      Điều khiển tủ IoT
+                    </Button>
+                    <Button
+                      type="dashed"
+                      icon={<SafetyCertificateOutlined />}
+                      onClick={() => setAdminClaimsOpen(true)}
+                    >
+                      Duyệt nhận đồ (Admin)
+                    </Button>
+                  </>
                 )}
               </Space>
             </div>
@@ -632,6 +660,15 @@ function App() {
                   </Button>
                   <Button
                     block
+                    type="primary"
+                    style={{ background: '#2563eb', borderColor: '#2563eb' }}
+                    icon={<ThunderboltOutlined />}
+                    onClick={() => setLockerControlOpen(true)}
+                  >
+                    Giám sát & Mở ngăn IoT (A01, A02)
+                  </Button>
+                  <Button
+                    block
                     icon={<SearchOutlined />}
                     onClick={() => {
                       const el = document.getElementById('found-items-section');
@@ -782,6 +819,12 @@ function App() {
       <AdminClaimsDrawer
         open={adminClaimsOpen}
         onClose={() => setAdminClaimsOpen(false)}
+        onRefreshParent={() => void loadData()}
+      />
+
+      <LockerControlDrawer
+        open={lockerControlOpen}
+        onClose={() => setLockerControlOpen(false)}
         onRefreshParent={() => void loadData()}
       />
     </AntApp>
