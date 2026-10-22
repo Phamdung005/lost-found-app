@@ -105,6 +105,168 @@ app.get("/api/lockers/:lockerCode/slots", async (req, res) => {
   }
 });
 
+// 1. Thêm ngăn tủ mới (Admin)
+app.post(
+  "/api/lockers/:lockerCode/slots",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { lockerCode } = req.params;
+      let { slot_code } = req.body;
+
+      const lockerRes = await pool.query(
+        "SELECT id FROM lockers WHERE locker_code = $1",
+        [lockerCode]
+      );
+      if (lockerRes.rowCount === 0) {
+        res.status(404).json({ success: false, message: "Không tìm thấy tủ" });
+        return;
+      }
+      const lockerId = lockerRes.rows[0].id;
+
+      // Nếu không nhập slot_code, tự động sinh mã kế tiếp (A01, A02 -> A03...)
+      if (!slot_code || !slot_code.trim()) {
+        const existingSlots = await pool.query(
+          "SELECT slot_code FROM locker_slots WHERE locker_id = $1 ORDER BY id DESC",
+          [lockerId]
+        );
+        const count = existingSlots.rowCount || 0;
+        const nextNum = (count + 1).toString().padStart(2, "0");
+        slot_code = `A${nextNum}`;
+      } else {
+        slot_code = slot_code.trim().toUpperCase();
+      }
+
+      // Kiểm tra trùng mã ngăn
+      const dupCheck = await pool.query(
+        "SELECT id FROM locker_slots WHERE locker_id = $1 AND slot_code = $2",
+        [lockerId, slot_code]
+      );
+      if ((dupCheck.rowCount || 0) > 0) {
+        res.status(400).json({
+          success: false,
+          message: `Ngăn tủ ${slot_code} đã tồn tại trong tủ này`,
+        });
+        return;
+      }
+
+      const insertRes = await pool.query(
+        `INSERT INTO locker_slots (locker_id, slot_code, status, occupancy_status, door_status, device_status)
+         VALUES ($1, $2, 'empty', 'empty', 'closed', 'online')
+         RETURNING id, locker_id, slot_code, status, occupancy_status, door_status, device_status`,
+        [lockerId, slot_code]
+      );
+
+      res.status(201).json({
+        success: true,
+        message: `Đã thêm ngăn tủ ${slot_code} thành công`,
+        data: insertRes.rows[0],
+      });
+    } catch (error) {
+      console.error("Add slot failed:", error);
+      res.status(500).json({ success: false, message: "Lỗi khi thêm ngăn tủ" });
+    }
+  }
+);
+
+// 2. Xóa ngăn tủ (Admin - An toàn, chỉ xóa khi ngăn trống)
+app.delete(
+  "/api/lockers/slots/:slotId",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { slotId } = req.params;
+
+      const slotRes = await pool.query(
+        "SELECT id, slot_code, occupancy_status FROM locker_slots WHERE id = $1",
+        [slotId]
+      );
+      if (slotRes.rowCount === 0) {
+        res.status(404).json({ success: false, message: "Không tìm thấy ngăn tủ" });
+        return;
+      }
+
+      const slot = slotRes.rows[0];
+
+      // Không cho xóa nếu ngăn đang chứa đồ
+      if (slot.occupancy_status === "occupied") {
+        res.status(400).json({
+          success: false,
+          message: `Ngăn ${slot.slot_code} đang chứa đồ! Vui lòng lấy đồ ra trước khi xóa.`,
+        });
+        return;
+      }
+
+      // Kiểm tra xem có đồ thất lạc nào đang gắn với ngăn này không
+      const itemCheck = await pool.query(
+        "SELECT id FROM found_items WHERE locker_slot_id = $1 AND status != 'claimed'",
+        [slotId]
+      );
+      if ((itemCheck.rowCount || 0) > 0) {
+        res.status(400).json({
+          success: false,
+          message: `Ngăn ${slot.slot_code} đang liên kết với đồ thất lạc chưa giải quyết!`,
+        });
+        return;
+      }
+
+      await pool.query("DELETE FROM locker_slots WHERE id = $1", [slotId]);
+
+      res.json({
+        success: true,
+        message: `Đã xóa ngăn tủ ${slot.slot_code} thành công`,
+      });
+    } catch (error) {
+      console.error("Delete slot failed:", error);
+      res.status(500).json({ success: false, message: "Lỗi khi xóa ngăn tủ" });
+    }
+  }
+);
+
+// 3. Đổi trạng thái ngăn tủ (Trống <-> Bảo trì)
+app.patch(
+  "/api/lockers/slots/:slotId/status",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { slotId } = req.params;
+      const { status } = req.body;
+
+      if (!["empty", "maintenance"].includes(status)) {
+        res.status(400).json({ success: false, message: "Trạng thái không hợp lệ" });
+        return;
+      }
+
+      const updateRes = await pool.query(
+        `UPDATE locker_slots 
+         SET occupancy_status = $1, status = $1, updated_at = now()
+         WHERE id = $2
+         RETURNING id, slot_code, occupancy_status, status`,
+        [status, slotId]
+      );
+
+      if (updateRes.rowCount === 0) {
+        res.status(404).json({ success: false, message: "Không tìm thấy ngăn tủ" });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: `Đã chuyển ngăn ${updateRes.rows[0].slot_code} sang ${
+          status === "maintenance" ? "Bảo trì" : "Hoạt động"
+        }`,
+        data: updateRes.rows[0],
+      });
+    } catch (error) {
+      console.error("Update slot status failed:", error);
+      res.status(500).json({ success: false, message: "Lỗi cập nhật trạng thái ngăn" });
+    }
+  }
+);
+
 app.get("/api/lost-reports", async (req, res) => {
   try {
     const { search, category } = req.query;

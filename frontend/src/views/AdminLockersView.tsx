@@ -5,13 +5,19 @@ import {
   Button,
   Switch,
   message,
-  Popconfirm
+  Popconfirm,
+  Modal,
+  Input,
+  Space,
 } from 'antd';
 import {
   UnlockOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   ReloadOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config/api';
@@ -26,6 +32,11 @@ export const AdminLockersView: React.FC = () => {
   const [commandHistory, setCommandHistory] = useState<any[]>([]);
   const [unlockingSlot, setUnlockingSlot] = useState<string | null>(null);
   const [togglingSim, setTogglingSim] = useState(false);
+
+  // Modal thêm ngăn tủ
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newSlotCode, setNewSlotCode] = useState('');
+  const [addingSlot, setAddingSlot] = useState(false);
 
   const fetchLockerData = async () => {
     setLoading(true);
@@ -64,6 +75,84 @@ export const AdminLockersView: React.FC = () => {
     }, 10000); // Poll every 10s
     return () => clearInterval(interval);
   }, [token]);
+
+  // Gợi ý mã ngăn tiếp theo khi mở modal
+  const handleOpenAddModal = () => {
+    const nextNum = (slots.length + 1).toString().padStart(2, '0');
+    setNewSlotCode(`A${nextNum}`);
+    setAddModalOpen(true);
+  };
+
+  // 1. Thêm ngăn tủ
+  const handleAddSlot = async () => {
+    if (!newSlotCode.trim()) {
+      message.error('Vui lòng nhập mã ngăn tủ (ví dụ A03)');
+      return;
+    }
+    setAddingSlot(true);
+    try {
+      const res = await fetch(`${API_BASE}/lockers/L-001/slots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ slot_code: newSlotCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Lỗi khi tạo ngăn tủ');
+      }
+      message.success(data.message || 'Đã thêm ngăn tủ mới thành công!');
+      setAddModalOpen(false);
+      await fetchLockerData();
+    } catch (err: any) {
+      message.error(err.message || 'Không thể tạo ngăn tủ');
+    } finally {
+      setAddingSlot(false);
+    }
+  };
+
+  // 2. Xóa ngăn tủ
+  const handleDeleteSlot = async (slotId: number, slotCode: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/lockers/slots/${slotId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Lỗi khi xóa ngăn');
+      }
+      message.success(data.message || `Đã xóa ngăn ${slotCode}`);
+      await fetchLockerData();
+    } catch (err: any) {
+      message.error(err.message || 'Không thể xóa ngăn tủ');
+    }
+  };
+
+  // 3. Đổi trạng thái bảo trì
+  const handleToggleMaintenance = async (slotId: number, currentStatus: string) => {
+    const nextStatus = currentStatus === 'maintenance' ? 'empty' : 'maintenance';
+    try {
+      const res = await fetch(`${API_BASE}/lockers/slots/${slotId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Lỗi khi đổi trạng thái');
+      }
+      message.success(data.message);
+      await fetchLockerData();
+    } catch (err: any) {
+      message.error(err.message || 'Không thể cập nhật trạng thái');
+    }
+  };
 
   // Toggle Simulation Mode
   const handleToggleSimulation = async (enabled: boolean) => {
@@ -201,83 +290,201 @@ export const AdminLockersView: React.FC = () => {
         </Tag>
       </div>
 
-      {/* Slots List (A01, A02) */}
-      <div style={{ marginBottom: 20 }}>
-        <Title level={5} style={{ margin: '0 0 10px', fontWeight: 700 }}>
-          Danh sách ngăn tủ (L-001)
-        </Title>
+      {/* Slots List Header + Add Slot Button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <Title level={5} style={{ margin: 0, fontWeight: 700 }}>
+            Danh sách ngăn tủ (L-001)
+          </Title>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Tổng cộng: {slots.length} ngăn
+          </Text>
+        </div>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={handleOpenAddModal}
+          style={{ borderRadius: 8, background: '#16a34a', borderColor: '#16a34a', fontWeight: 600 }}
+        >
+          Thêm ngăn mới
+        </Button>
+      </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {['A01', 'A02'].map((slotCode) => {
-            const slotData = slots.find((s) => s.slot_code === slotCode);
-            const isEmpty = slotData ? slotData.status.toLowerCase() === 'empty' : true;
-            const doorState = deviceStatus?.door_states?.[slotCode] || 'closed';
-            const isUnlockingThis = unlockingSlot === slotCode;
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+        {slots.length === 0 && (
+          <div className="card-clean" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px 0' }}>
+            Chưa có ngăn tủ nào. Bấm nút "Thêm ngăn mới" ở trên để tạo ngăn đầu tiên.
+          </div>
+        )}
 
-            return (
-              <div key={slotCode} className="slot-hardware-card">
-                <div className="slot-hardware-header">
-                  <div>
-                    <span className="slot-code-title">Ngăn {slotCode}</span>
-                    <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>
-                      (GPIO {slotCode === 'A01' ? '18/22' : '19/23'})
-                    </span>
-                  </div>
-                  <Tag color={isEmpty ? 'success' : 'orange'} style={{ borderRadius: 6 }}>
-                    {isEmpty ? 'Ngăn trống' : 'Đang chứa đồ'}
-                  </Tag>
+        {slots.map((slot) => {
+          const slotCode = slot.slot_code;
+          const status = slot.occupancy_status || slot.status || 'empty';
+          const isOccupied = status === 'occupied';
+          const isMaintenance = status === 'maintenance';
+          const isEmpty = status === 'empty';
+          const doorState = deviceStatus?.door_states?.[slotCode] || slot.door_status || 'closed';
+          const isUnlockingThis = unlockingSlot === slotCode;
+
+          return (
+            <div
+              key={slot.id || slotCode}
+              className="slot-hardware-card"
+              style={{
+                borderLeft: isMaintenance
+                  ? '4px solid #ef4444'
+                  : isOccupied
+                  ? '4px solid #f59e0b'
+                  : '4px solid #10b981',
+              }}
+            >
+              <div
+                className="slot-hardware-header"
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="slot-code-title">Ngăn {slotCode}</span>
+                  {isOccupied && <Tag color="warning">Có đồ</Tag>}
+                  {isEmpty && <Tag color="success">Trống</Tag>}
+                  {isMaintenance && <Tag color="error">Bảo trì</Tag>}
                 </div>
 
-                {/* 4 Independent States Metadata */}
-                <div className="slot-meta-row">
-                  <div className="slot-meta-item">
-                    <span className="slot-meta-label">Trạng thái chứa đồ:</span>
-                    <span className="slot-meta-val" style={{ color: isEmpty ? '#16a34a' : '#d97706' }}>
-                      {isEmpty ? 'Trống (Sẵn sàng)' : 'Có đồ thất lạc'}
-                    </span>
-                  </div>
-
-                  <div className="slot-meta-item">
-                    <span className="slot-meta-label">Cảm biến từ cửa tủ:</span>
-                    <span className="slot-meta-val" style={{ color: doorState === 'open' ? '#2563eb' : '#64748b' }}>
-                      {doorState === 'open' ? '🚪 Cửa đang MỞ' : '🔒 Cửa đang ĐÓNG'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Manual Unlock Action */}
-                <Popconfirm
-                  title={`Xác nhận mở ngăn ${slotCode}?`}
-                  description={
-                    isSimulation
-                      ? 'Hệ thống sẽ thực hiện lệnh mô phỏng mở servo.'
-                      : 'Hệ thống sẽ gửi lệnh xoay Servo SG90 trên ESP32.'
-                  }
-                  onConfirm={() => handleUnlockSlot(slotCode)}
-                  okText="Mở ngăn"
-                  cancelText="Hủy"
-                >
+                {/* Quản lý ngăn: Nút Đổi Bảo trì & Nút Xóa ngăn */}
+                <Space size="small">
                   <Button
-                    type="primary"
-                    block
-                    icon={<UnlockOutlined />}
-                    loading={isUnlockingThis}
+                    size="small"
+                    type="text"
+                    icon={<ToolOutlined />}
+                    onClick={() => handleToggleMaintenance(slot.id, status)}
+                    style={{ fontSize: 12, color: isMaintenance ? '#16a34a' : '#f59e0b' }}
+                  >
+                    {isMaintenance ? 'Bỏ bảo trì' : 'Bảo trì'}
+                  </Button>
+
+                  <Popconfirm
+                    title={`Xác nhận xóa ngăn ${slotCode}?`}
+                    description={
+                      isOccupied
+                        ? 'Ngăn đang chứa đồ, không thể xóa!'
+                        : 'Ngăn này sẽ được xóa vĩnh viễn khỏi tủ L-001.'
+                    }
+                    disabled={isOccupied}
+                    onConfirm={() => handleDeleteSlot(slot.id, slotCode)}
+                    okText="Xóa ngăn"
+                    cancelText="Hủy"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      size="small"
+                      danger
+                      type="text"
+                      icon={<DeleteOutlined />}
+                      disabled={isOccupied}
+                      title={isOccupied ? 'Ngăn đang có đồ, không thể xóa' : 'Xóa ngăn'}
+                    />
+                  </Popconfirm>
+                </Space>
+              </div>
+
+              {/* Thông tin trạng thái */}
+              <div className="slot-meta-row">
+                <div className="slot-meta-item">
+                  <span className="slot-meta-label">Trạng thái:</span>
+                  <span
+                    className="slot-meta-val"
                     style={{
-                      height: 44,
-                      borderRadius: 10,
-                      fontWeight: 600,
-                      background: isSimulation ? '#f59e0b' : '#2563eb',
-                      borderColor: isSimulation ? '#f59e0b' : '#2563eb',
+                      color: isMaintenance ? '#ef4444' : isOccupied ? '#d97706' : '#16a34a',
                     }}
                   >
-                    {isSimulation ? `Mô phỏng mở ngăn ${slotCode}` : `Mở ngăn ${slotCode} (Servo)`}
-                  </Button>
-                </Popconfirm>
+                    {isMaintenance ? 'Đang bảo trì' : isOccupied ? 'Có đồ thất lạc' : 'Trống (Sẵn sàng)'}
+                  </span>
+                </div>
+
+                <div className="slot-meta-item">
+                  <span className="slot-meta-label">Cảm biến cửa:</span>
+                  <span
+                    className="slot-meta-val"
+                    style={{ color: doorState === 'open' ? '#2563eb' : '#64748b' }}
+                  >
+                    {doorState === 'open' ? '🚪 Cửa đang MỞ' : '🔒 Cửa đang ĐÓNG'}
+                  </span>
+                </div>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Nút Mở khóa Servo */}
+              <Popconfirm
+                title={`Xác nhận mở ngăn ${slotCode}?`}
+                description={
+                  isSimulation
+                    ? 'Hệ thống sẽ thực hiện lệnh mô phỏng mở servo.'
+                    : 'Hệ thống sẽ gửi lệnh xoay Servo SG90 trên ESP32.'
+                }
+                onConfirm={() => handleUnlockSlot(slotCode)}
+                okText="Mở ngăn"
+                cancelText="Hủy"
+              >
+                <Button
+                  type="primary"
+                  block
+                  icon={<UnlockOutlined />}
+                  loading={isUnlockingThis}
+                  style={{
+                    height: 42,
+                    borderRadius: 10,
+                    fontWeight: 600,
+                    background: isSimulation ? '#f59e0b' : '#2563eb',
+                    borderColor: isSimulation ? '#f59e0b' : '#2563eb',
+                  }}
+                >
+                  {isSimulation ? `Mô phỏng mở ngăn ${slotCode}` : `Mở ngăn ${slotCode} (Servo)`}
+                </Button>
+              </Popconfirm>
+            </div>
+          );
+        })}
       </div>
+
+      {/* Modal Thêm ngăn tủ mới (Giao diện cực kỳ đơn giản) */}
+      <Modal
+        title={
+          <Space>
+            <PlusOutlined style={{ color: '#16a34a' }} />
+            <span>Thêm ngăn tủ mới vào Tủ L-001</span>
+          </Space>
+        }
+        open={addModalOpen}
+        onCancel={() => setAddModalOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setAddModalOpen(false)}>
+            Hủy
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={addingSlot}
+            onClick={handleAddSlot}
+            style={{ background: '#16a34a', borderColor: '#16a34a' }}
+          >
+            Tạo ngăn tủ
+          </Button>,
+        ]}
+      >
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 14 }}>
+          Hệ thống sẽ tự động tạo ngăn mới ở trạng thái <b>Trống</b> sẵn sàng chứa đồ.
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 6 }}>
+            Mã ngăn tủ:
+          </label>
+          <Input
+            value={newSlotCode}
+            onChange={(e) => setNewSlotCode(e.target.value)}
+            placeholder="Ví dụ: A03, A04..."
+            size="large"
+            style={{ borderRadius: 8 }}
+          />
+        </div>
+      </Modal>
 
       {/* Recent Commands History */}
       <div className="card-clean" style={{ margin: 0 }}>
