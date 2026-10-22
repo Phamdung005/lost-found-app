@@ -290,7 +290,7 @@ router.get("/status", async (_req: Request, res: Response): Promise<void> => {
 router.post("/commands", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const adminId = req.user?.id;
-    const { slot_code, command_type, duration_ms } = req.body;
+    const { slot_code, command_type, duration_ms, release_item } = req.body;
 
     if (!slot_code || !["A01", "A02"].includes(slot_code)) {
       res.status(400).json({ success: false, message: "Mã ngăn phải là A01 hoặc A02" });
@@ -323,22 +323,59 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
       slot.locker_id,
       slot.id,
       command_type || "OPEN_SLOT",
-      JSON.stringify({ duration_ms: duration_ms || 3000, gpio: slot_code === "A01" ? 18 : 19 }),
+      JSON.stringify({ 
+        duration_ms: duration_ms || 5000, 
+        gpio: slot_code === "A01" ? 18 : 19,
+        release_item: !!release_item
+      }),
       adminId,
       slot.is_simulation_mode,
     ]);
+
+    // Nếu Admin chọn "Mở ngăn & Lấy đồ ra" -> Cập nhật đồ đã trả và giải phóng ngăn tủ về Trống
+    if (release_item === true) {
+      // 1. Cập nhật đồ vật trong ngăn sang 'returned'
+      await pool.query(
+        `UPDATE found_items 
+         SET status = 'returned', updated_at = now() 
+         WHERE (slot_id = $1 OR locker_slot_id = $1) AND status IN ('in_locker', 'stored', 'reported')`,
+        [slot.id]
+      );
+
+      // 2. Cập nhật các yêu cầu nhận đồ (nếu có)
+      await pool.query(
+        `UPDATE found_item_claims 
+         SET status = 'claimed', claimed_at = now(), updated_at = now() 
+         WHERE found_item_id IN (
+           SELECT id FROM found_items WHERE (slot_id = $1 OR locker_slot_id = $1)
+         ) AND status IN ('pending', 'approved')`,
+        [slot.id]
+      );
+
+      // 3. Giải phóng ngăn tủ về trống
+      await pool.query(
+        `UPDATE locker_slots 
+         SET occupancy_status = 'empty', status = 'empty', updated_at = now() 
+         WHERE id = $1`,
+        [slot.id]
+      );
+    }
 
     await logAudit(adminId!, "ADMIN_COMMAND_ISSUED", {
       command_id: cmdRes.rows[0].id,
       slot_code,
       command_type: command_type || "OPEN_SLOT",
+      release_item: !!release_item,
     });
+
+    let successMsg = `Đã gửi lệnh mở ngăn ${slot_code} vào hàng đợi ESP32`;
+    if (release_item) {
+      successMsg = `Đã mở ngăn ${slot_code} và đánh dấu đồ vật đã trao trả (ngăn tủ trở về Trống)`;
+    }
 
     res.status(201).json({
       success: true,
-      message: slot.is_online
-        ? `Đã gửi lệnh mở ngăn ${slot_code} vào hàng đợi ESP32`
-        : `Đã đưa lệnh mở ngăn ${slot_code} vào hàng đợi (Thiết bị ESP32 hiện đang ngoại tuyến, sẽ nhận lệnh khi kết nối)`,
+      message: successMsg,
       data: {
         command: cmdRes.rows[0],
         is_online: slot.is_online,

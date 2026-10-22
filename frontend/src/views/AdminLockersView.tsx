@@ -152,8 +152,8 @@ export const AdminLockersView: React.FC = () => {
     }
   };
 
-  // Issue Unlock Command for slot A01 or A02
-  const handleUnlockSlot = async (slotCode: string) => {
+  // Issue Unlock Command for slot A01 or A02 (hỗ trợ lấy đồ ra và giải phóng ngăn)
+  const handleUnlockSlot = async (slotCode: string, releaseItem: boolean = false) => {
     setUnlockingSlot(slotCode);
     try {
       const res = await fetch(`${API_BASE}/device/commands`, {
@@ -166,6 +166,7 @@ export const AdminLockersView: React.FC = () => {
           locker_code: 'L-001',
           slot_code: slotCode,
           action: 'unlock_slot',
+          release_item: releaseItem,
         }),
       });
 
@@ -352,29 +353,78 @@ export const AdminLockersView: React.FC = () => {
               </div>
 
               {/* Nút Mở khóa Servo */}
-              <Popconfirm
-                title={`Xác nhận mở ngăn ${slotCode}?`}
-                description="Hệ thống sẽ gửi lệnh xoay Servo SG90 trên ESP32 để mở chốt."
-                onConfirm={() => handleUnlockSlot(slotCode)}
-                okText="Mở ngăn"
-                cancelText="Hủy"
-              >
-                <Button
-                  type="primary"
-                  block
-                  icon={<UnlockOutlined />}
-                  loading={isUnlockingThis}
-                  style={{
-                    height: 42,
-                    borderRadius: 10,
-                    fontWeight: 600,
-                    background: '#2563eb',
-                    borderColor: '#2563eb',
-                  }}
+              {isOccupied ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Popconfirm
+                    title={`Mở ngăn ${slotCode} & Lấy đồ ra?`}
+                    description="Servo sẽ mở chốt, đồ vật bên trong sẽ được đánh dấu ĐÃ TRAO TRẢ và ngăn tủ trở về TRỐNG."
+                    onConfirm={() => handleUnlockSlot(slotCode, true)}
+                    okText="Lấy đồ & Trả"
+                    cancelText="Hủy"
+                  >
+                    <Button
+                      type="primary"
+                      block
+                      icon={<UnlockOutlined />}
+                      loading={isUnlockingThis}
+                      style={{
+                        height: 38,
+                        borderRadius: 8,
+                        fontWeight: 600,
+                        background: '#16a34a',
+                        borderColor: '#16a34a',
+                      }}
+                    >
+                      Mở & Lấy đồ ra (Đã trả)
+                    </Button>
+                  </Popconfirm>
+
+                  <Popconfirm
+                    title={`Chỉ mở kiểm tra ngăn ${slotCode}?`}
+                    description="Servo sẽ mở chốt để kiểm tra. Đồ vật bên trong vẫn sẽ được giữ nguyên."
+                    onConfirm={() => handleUnlockSlot(slotCode, false)}
+                    okText="Mở kiểm tra"
+                    cancelText="Hủy"
+                  >
+                    <Button
+                      block
+                      size="small"
+                      loading={isUnlockingThis}
+                      style={{
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: '#64748b',
+                      }}
+                    >
+                      Chỉ mở kiểm tra (Giữ đồ)
+                    </Button>
+                  </Popconfirm>
+                </div>
+              ) : (
+                <Popconfirm
+                  title={`Xác nhận mở ngăn ${slotCode}?`}
+                  description="Hệ thống sẽ gửi lệnh xoay Servo SG90 trên ESP32 để mở chốt."
+                  onConfirm={() => handleUnlockSlot(slotCode, false)}
+                  okText="Mở ngăn"
+                  cancelText="Hủy"
                 >
-                  Mở ngăn {slotCode} (Servo)
-                </Button>
-              </Popconfirm>
+                  <Button
+                    type="primary"
+                    block
+                    icon={<UnlockOutlined />}
+                    loading={isUnlockingThis}
+                    style={{
+                      height: 42,
+                      borderRadius: 10,
+                      fontWeight: 600,
+                      background: '#2563eb',
+                      borderColor: '#2563eb',
+                    }}
+                  >
+                    Mở ngăn {slotCode} (Servo)
+                  </Button>
+                </Popconfirm>
+              )}
             </div>
           );
         })}
