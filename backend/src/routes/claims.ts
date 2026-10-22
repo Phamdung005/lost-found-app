@@ -156,8 +156,63 @@ router.get("/my", authenticateToken, async (req: AuthenticatedRequest, res: Resp
   }
 });
 
-// 3. Admin lấy toàn bộ danh sách yêu cầu nhận đồ
-router.get("/", authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+// 3. Admin lấy toàn bộ danh sách yêu cầu nhận đồ (có thể lọc theo status query)
+router.get("/", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { status } = req.query;
+    let query = `
+      SELECT 
+        c.id,
+        c.found_item_id,
+        c.user_id,
+        c.proof_description,
+        c.proof_contact,
+        c.status,
+        c.claim_code,
+        c.code_expires_at,
+        c.rejection_reason,
+        c.claimed_at,
+        c.created_at,
+        u.full_name as user_name,
+        u.full_name as claimer_name,
+        u.email as user_email,
+        u.email as claimer_email,
+        u.phone as user_phone,
+        f.item_name,
+        f.category,
+        f.found_location,
+        f.tracking_code,
+        f.description as item_secret_description,
+        f.image_url,
+        s.slot_code,
+        l.locker_code
+      FROM found_item_claims c
+      JOIN users u ON c.user_id = u.id
+      JOIN found_items f ON c.found_item_id = f.id
+      LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
+      LEFT JOIN lockers l ON s.locker_id = l.id
+    `;
+    const params: any[] = [];
+    if (status && typeof status === "string") {
+      params.push(status);
+      query += ` WHERE c.status = $1`;
+    }
+    query += ` ORDER BY c.id DESC`;
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error("Get all claims error:", error);
+    res.status(500).json({ success: false, message: "Không thể lấy danh sách yêu cầu nhận đồ" });
+  }
+});
+
+// 3.1 Admin lấy danh sách yêu cầu nhận đồ ĐANG CHỜ DUYỆT (pending)
+router.get("/pending", authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const result = await pool.query(
       `SELECT 
@@ -173,11 +228,14 @@ router.get("/", authenticateToken, requireAdmin, async (_req: AuthenticatedReque
          c.claimed_at,
          c.created_at,
          u.full_name as user_name,
+         u.full_name as claimer_name,
          u.email as user_email,
+         u.email as claimer_email,
          u.phone as user_phone,
          f.item_name,
          f.category,
          f.found_location,
+         f.tracking_code,
          f.description as item_secret_description,
          f.image_url,
          s.slot_code,
@@ -185,8 +243,9 @@ router.get("/", authenticateToken, requireAdmin, async (_req: AuthenticatedReque
        FROM found_item_claims c
        JOIN users u ON c.user_id = u.id
        JOIN found_items f ON c.found_item_id = f.id
-       LEFT JOIN locker_slots s ON f.slot_id = s.id
+       LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
        LEFT JOIN lockers l ON s.locker_id = l.id
+       WHERE c.status = 'pending'
        ORDER BY c.id DESC`
     );
 
@@ -195,13 +254,13 @@ router.get("/", authenticateToken, requireAdmin, async (_req: AuthenticatedReque
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get all claims error:", error);
-    res.status(500).json({ success: false, message: "Không thể lấy danh sách yêu cầu nhận đồ" });
+    console.error("Get pending claims error:", error);
+    res.status(500).json({ success: false, message: "Không thể lấy danh sách yêu cầu chờ duyệt" });
   }
 });
 
-// 4. Admin duyệt hoặc từ chối yêu cầu (Luồng xác minh & cấp mã OTP 1 lần)
-router.post("/:id/verify", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// Hàm dùng chung xử lý xác minh (Duyệt hoặc Từ chối)
+async function handleVerifyClaim(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const adminId = req.user?.id;
     const claimId = Number(req.params.id);
@@ -239,14 +298,15 @@ router.post("/:id/verify", authenticateToken, requireAdmin, async (req: Authenti
     }
 
     if (action === "reject") {
+      const actualReason = rejection_reason || req.body?.reason || "Thông tin đối chiếu không trùng khớp";
       await pool.query(
         `UPDATE found_item_claims 
          SET status = 'rejected', rejection_reason = $1, verified_by = $2, updated_at = now()
          WHERE id = $3`,
-        [rejection_reason || "Thông tin đối chiếu không trùng khớp", adminId, claimId]
+        [actualReason, adminId, claimId]
       );
 
-      await logAudit(adminId!, "CLAIM_REJECTED", { claim_id: claimId, reason: rejection_reason });
+      await logAudit(adminId!, "CLAIM_REJECTED", { claim_id: claimId, reason: actualReason });
 
       // Thông báo cho User
       await createNotification({
@@ -324,6 +384,17 @@ router.post("/:id/verify", authenticateToken, requireAdmin, async (req: Authenti
     console.error("Verify claim error:", error);
     res.status(500).json({ success: false, message: "Lỗi hệ thống khi xác minh yêu cầu" });
   }
+}
+
+// 4. Các endpoint duyệt / từ chối
+router.post("/:id/verify", authenticateToken, requireAdmin, handleVerifyClaim);
+router.post("/:id/approve", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  req.body = { ...req.body, action: "approve" };
+  await handleVerifyClaim(req, res);
+});
+router.post("/:id/reject", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  req.body = { ...req.body, action: "reject" };
+  await handleVerifyClaim(req, res);
 });
 
 // 5. Xác minh mã OTP mở tủ lấy đồ (Luồng hoàn tất nhận đồ)

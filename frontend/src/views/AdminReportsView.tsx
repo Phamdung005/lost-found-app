@@ -69,13 +69,20 @@ export const AdminReportsView: React.FC = () => {
     }
   };
 
+  // Tải đồng thời cả 2 danh mục để hiển thị số lượng badge chính xác
+  useEffect(() => {
+    if (!token) return;
+    void fetchClaims();
+    void fetchLostReports();
+  }, [token]);
+
   useEffect(() => {
     if (tab === 'claims') {
       void fetchClaims();
     } else {
       void fetchLostReports();
     }
-  }, [tab, token]);
+  }, [tab]);
 
   const handleApprove = async (claimId: number) => {
     setProcessingAction(true);
