@@ -454,4 +454,101 @@ router.post("/simulate-execute/:id", authenticateToken, requireAdmin, async (req
   }
 });
 
+// 6. ESP32 Gửi mã OTP nhập từ bàn phím Keypad để mở tủ nhận đồ
+router.post("/verify-otp", authenticateDevice, async (req: Request, res: Response): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const { otp, claim_code } = req.body;
+    const inputCode = (otp || claim_code || "").toString().trim();
+
+    if (!inputCode) {
+      res.status(400).json({ success: false, message: "Vui lòng cung cấp mã OTP" });
+      return;
+    }
+
+    await client.query("BEGIN");
+
+    // Tìm claim đang approved và khớp mã OTP
+    const claimRes = await client.query(
+      `SELECT c.id, c.found_item_id, c.user_id, c.status, c.claim_code, c.code_expires_at,
+              f.item_name, f.locker_slot_id, s.slot_code, l.locker_code
+       FROM found_item_claims c
+       JOIN found_items f ON c.found_item_id = f.id
+       LEFT JOIN locker_slots s ON f.locker_slot_id = s.id
+       LEFT JOIN lockers l ON s.locker_id = l.id
+       WHERE (c.claim_code = $1 OR c.claim_code_hash = $1)
+         AND c.status = 'approved'
+       FOR UPDATE OF c`,
+      [inputCode]
+    );
+
+    if (claimRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({
+        success: false,
+        message: "Mã OTP không đúng hoặc chưa được phê duyệt",
+      });
+      return;
+    }
+
+    const claim = claimRes.rows[0];
+
+    // Kiểm tra hạn OTP nếu có
+    if (claim.code_expires_at && new Date() > new Date(claim.code_expires_at)) {
+      await client.query("ROLLBACK");
+      res.status(400).json({
+        success: false,
+        message: "Mã OTP đã hết hạn sử dụng",
+      });
+      return;
+    }
+
+    const slotCode = claim.slot_code || "A01";
+    const slotId = claim.locker_slot_id;
+
+    // Đánh dấu yêu cầu đã hoàn tất
+    await client.query(
+      `UPDATE found_item_claims 
+       SET status = 'claimed', claimed_at = now(), updated_at = now()
+       WHERE id = $1`,
+      [claim.id]
+    );
+
+    // Cập nhật món đồ thành đã trao trả
+    await client.query(
+      `UPDATE found_items
+       SET status = 'returned', updated_at = now()
+       WHERE id = $1`,
+      [claim.found_item_id]
+    );
+
+    // Cập nhật ngăn tủ về trạng thái trống
+    if (slotId) {
+      await client.query(
+        `UPDATE locker_slots
+         SET occupancy_status = 'empty', status = 'empty', door_status = 'open', updated_at = now()
+         WHERE id = $1`,
+        [slotId]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: `Xác thực thành công! Mở ngăn ${slotCode}`,
+      data: {
+        slot_code: slotCode,
+        item_name: claim.item_name,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Device verify OTP error:", error);
+    res.status(500).json({ success: false, message: "Lỗi hệ thống khi kiểm tra OTP" });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
