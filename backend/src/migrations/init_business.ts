@@ -5,7 +5,48 @@ export async function runBusinessMigration() {
   try {
     await client.query("BEGIN");
 
-    // 1. Cập nhật an toàn bảng locker_slots
+    // 1. Tạo bảng lockers nếu chưa tồn tại
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lockers (
+        id SERIAL PRIMARY KEY,
+        locker_code VARCHAR(50) NOT NULL UNIQUE,
+        location VARCHAR(255) NOT NULL DEFAULT 'Khu vực Trung tâm',
+        status VARCHAR(50) NOT NULL DEFAULT 'active',
+        device_token VARCHAR(255) DEFAULT 'esp32_smart_locker_secret_token_2026',
+        last_heartbeat TIMESTAMPTZ,
+        ip_address VARCHAR(50),
+        firmware_version VARCHAR(50) DEFAULT 'v1.0.0',
+        wifi_rssi INT,
+        is_simulation_mode BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+
+    // Tạo tủ mẫu L-001 nếu chưa có
+    await client.query(`
+      INSERT INTO lockers (locker_code, location, status, device_token)
+      VALUES ('L-001', 'Khu vực Trung tâm', 'active', 'esp32_smart_locker_secret_token_2026')
+      ON CONFLICT (locker_code) DO NOTHING;
+    `);
+
+    // 2. Tạo bảng locker_slots nếu chưa tồn tại
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS locker_slots (
+        id SERIAL PRIMARY KEY,
+        locker_id INT NOT NULL REFERENCES lockers(id) ON DELETE CASCADE,
+        slot_code VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'empty',
+        occupancy_status VARCHAR(20) DEFAULT 'empty',
+        door_status VARCHAR(20) DEFAULT 'closed',
+        device_status VARCHAR(20) DEFAULT 'online',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(locker_id, slot_code)
+      );
+    `);
+
+    // Cập nhật các cột an toàn cho locker_slots nếu đã tồn tại từ trước
     await client.query(`
       ALTER TABLE locker_slots 
       ADD COLUMN IF NOT EXISTS occupancy_status VARCHAR(20) DEFAULT 'empty',
@@ -14,39 +55,55 @@ export async function runBusinessMigration() {
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
     `);
 
-    // Đồng bộ trạng thái status cũ sang occupancy_status nếu chưa set
+    // Khởi tạo 2 ngăn A01, A02 mẫu cho tủ L-001 nếu chưa có
     await client.query(`
-      UPDATE locker_slots 
-      SET occupancy_status = CASE 
-        WHEN status ILIKE '%empty%' THEN 'empty'
-        WHEN status ILIKE '%occupied%' THEN 'occupied'
-        ELSE status
-      END
-      WHERE occupancy_status IS NULL OR occupancy_status = 'empty';
+      INSERT INTO locker_slots (locker_id, slot_code, status, occupancy_status, door_status, device_status)
+      SELECT l.id, s.code, 'empty', 'empty', 'closed', 'online'
+      FROM lockers l
+      CROSS JOIN (VALUES ('A01'), ('A02')) AS s(code)
+      WHERE l.locker_code = 'L-001'
+      ON CONFLICT (locker_id, slot_code) DO NOTHING;
     `);
 
-    // 2. Cập nhật an toàn bảng found_items
+    // 3. Tạo bảng found_items
     await client.query(`
-      ALTER TABLE found_items 
-      ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'other',
-      ADD COLUMN IF NOT EXISTS image_url TEXT,
-      ADD COLUMN IF NOT EXISTS finder_contact VARCHAR(100),
-      ADD COLUMN IF NOT EXISTS tracking_code VARCHAR(50),
-      ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now(),
-      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+      CREATE TABLE IF NOT EXISTS found_items (
+        id SERIAL PRIMARY KEY,
+        item_name VARCHAR(255) NOT NULL,
+        category VARCHAR(50) DEFAULT 'other',
+        description TEXT,
+        found_location VARCHAR(255) NOT NULL,
+        found_at TIMESTAMPTZ DEFAULT now(),
+        image_url TEXT,
+        finder_contact VARCHAR(100),
+        tracking_code VARCHAR(50) UNIQUE,
+        status VARCHAR(50) NOT NULL DEFAULT 'reported',
+        locker_slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
+        created_by INT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
     `);
 
-    // 3. Cập nhật an toàn bảng lost_reports
+    // 4. Tạo bảng lost_reports
     await client.query(`
-      ALTER TABLE lost_reports 
-      ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'other',
-      ADD COLUMN IF NOT EXISTS user_id INT REFERENCES users(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS image_url TEXT,
-      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+      CREATE TABLE IF NOT EXISTS lost_reports (
+        id SERIAL PRIMARY KEY,
+        item_name VARCHAR(255) NOT NULL,
+        category VARCHAR(50) DEFAULT 'other',
+        description TEXT,
+        lost_location VARCHAR(255) NOT NULL,
+        lost_at TIMESTAMPTZ DEFAULT now(),
+        reporter_contact VARCHAR(100),
+        status VARCHAR(50) NOT NULL DEFAULT 'searching',
+        user_id INT REFERENCES users(id) ON DELETE SET NULL,
+        image_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
     `);
 
-    // 4. Tạo bảng found_item_claims (Yêu cầu nhận lại đồ và mã OTP 1 lần)
+    // 5. Tạo bảng found_item_claims
     await client.query(`
       CREATE TABLE IF NOT EXISTS found_item_claims (
         id SERIAL PRIMARY KEY,
@@ -66,7 +123,7 @@ export async function runBusinessMigration() {
       );
     `);
 
-    // 5. Tạo indexes
+    // 6. Tạo indexes
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_found_items_category ON found_items(category);
       CREATE INDEX IF NOT EXISTS idx_found_items_status ON found_items(status);
@@ -79,7 +136,7 @@ export async function runBusinessMigration() {
     `);
 
     await client.query("COMMIT");
-    console.log("Business schema migration completed successfully.");
+    console.log("Business schema migration completed successfully (lockers, slots, items created).");
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Business migration failed:", err);
