@@ -510,12 +510,18 @@ router.post("/simulate-execute/:id", authenticateToken, requireAdmin, async (req
   }
 });
 
+// Bộ nhớ tạm theo dõi số lần nhập sai OTP (Key: lockerId_slotCode)
+const otpFailTracker = new Map<string, { count: number; lastFailedAt: number }>();
+
 // 6. ESP32 Gửi mã OTP nhập từ bàn phím Keypad để mở tủ nhận đồ
 router.post("/verify-otp", authenticateDevice, async (req: Request, res: Response): Promise<void> => {
   const client = await pool.connect();
   try {
-    const { otp, claim_code } = req.body;
+    const { otp, claim_code, failed_attempts, slot_code } = req.body;
     const inputCode = (otp || claim_code || "").toString().trim();
+    const targetSlot = (slot_code || "A01").toString().toUpperCase();
+    const lockerId = (req as any).device?.id || 1;
+    const trackerKey = `${lockerId}_${targetSlot}`;
 
     if (!inputCode) {
       res.status(400).json({ success: false, message: "Vui lòng cung cấp mã OTP" });
@@ -540,6 +546,30 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
 
     if (claimRes.rows.length === 0) {
       await client.query("ROLLBACK");
+
+      // Cập nhật số lần nhập sai
+      const now = Date.now();
+      const current = otpFailTracker.get(trackerKey) || { count: 0, lastFailedAt: 0 };
+      if (now - current.lastFailedAt > 5 * 60 * 1000) {
+        current.count = 0; // Quá 5 phút thì làm mới lại
+      }
+      current.count += 1;
+      current.lastFailedAt = now;
+      otpFailTracker.set(trackerKey, current);
+
+      const espFailed = Number(failed_attempts) || 0;
+      // Nếu nhập sai 3 lần (hoặc ESP32 báo đạt mốc 3 lần)
+      if (current.count >= 3 || espFailed >= 3) {
+        console.warn(`[SECURITY ALERT] Nhập sai OTP 3 lần tại tủ #${lockerId} - Ngăn ${targetSlot}`);
+        await createNotification({
+          role: "admin",
+          title: "CẢNH BÁO: Nhập sai OTP 3 lần liên tiếp!",
+          message: `Tủ L-001 phát hiện nhập sai mã OTP 3 lần tại ngăn ${targetSlot}. Bàn phím tủ đã tạm khóa 60 giây để phòng ngừa kẻ gian.`,
+          type: "warning",
+        });
+        current.count = 0; // Đã cảnh báo xong thì reset lại
+      }
+
       res.status(404).json({
         success: false,
         message: "Mã OTP không đúng hoặc chưa được phê duyệt",
@@ -597,13 +627,16 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
       );
     }
 
+    // Reset bộ đếm sai khi người dùng nhập đúng
+    otpFailTracker.delete(trackerKey);
+
     await client.query("COMMIT");
 
     // Thông báo cho User
     if (claim.user_id) {
       await createNotification({
         userId: claim.user_id,
-        title: "🎁 Mở tủ tại Keypad thành công",
+        title: "Mở tủ tại Keypad thành công",
         message: `Mã OTP [${inputCode}] đã được nhập tại bàn phím tủ. Ngăn ${slotCode} đã mở để bạn lấy lại "${claim.item_name}".`,
         type: "success",
       });
@@ -612,7 +645,7 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
     // Thông báo cho Admin
     await createNotification({
       role: "admin",
-      title: `🔑 Mở tủ bằng Keypad thành công (${slotCode})`,
+      title: `Mở tủ bằng Keypad thành công (${slotCode})`,
       message: `Người dùng vừa nhập OTP [${inputCode}] tại bàn phím phần cứng. Ngăn ${slotCode} đã mở và trao trả món đồ "${claim.item_name}".`,
       type: "locker",
     });
