@@ -1,6 +1,7 @@
 import { pool } from "../db.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
+import { readObject } from "./object-storage.js";
 
 interface GeminiMatchResult {
   score: number;
@@ -61,21 +62,43 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
   const config = getGeminiConfig();
   if (!config) throw new Error("Chưa cấu hình GEMINI_API_KEY");
 
+  const imageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
+  const imageKeys = [
+    ...(Array.isArray(report.image_object_keys) ? report.image_object_keys : []),
+    ...(Array.isArray(item.image_object_keys) ? item.image_object_keys : []),
+  ].filter((key): key is string => typeof key === "string" && key.trim().length > 0).slice(0, 6);
+
+  for (const key of imageKeys) {
+    try {
+      const image = await readObject(key);
+      imageParts.push({
+        inlineData: {
+          mimeType: image.contentType,
+          data: Buffer.from(image.bytes).toString("base64"),
+        },
+      });
+    } catch (error) {
+      console.warn(`Không thể đọc ảnh matching ${key}:`, error);
+    }
+  }
+
+  const textPart = {
+    text: [
+      "Bạn là bộ phận gợi ý đối chiếu đồ thất lạc. Chỉ so sánh dữ liệu, không khẳng định chủ sở hữu.",
+      "Trả về duy nhất JSON hợp lệ dạng {\"score\": number, \"rationale\": string}. score nằm từ 0 đến 1.",
+      `BÁO MẤT: ${JSON.stringify({ ...report, image_object_keys: undefined })}`,
+      `ĐỒ TÌM THẤY: ${JSON.stringify({ ...item, image_object_keys: undefined })}`,
+      "Chấm điểm dựa trên tên, danh mục, đặc điểm, hình ảnh, thời gian và địa điểm. Hình ảnh chỉ là bằng chứng hỗ trợ; thiếu dữ liệu thì giảm điểm.",
+    ].join("\n"),
+  };
+
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{
-        parts: [{
-          text: [
-            "Bạn là bộ phận gợi ý đối chiếu đồ thất lạc. Chỉ so sánh dữ liệu, không khẳng định chủ sở hữu.",
-            "Trả về duy nhất JSON hợp lệ dạng {\"score\": number, \"rationale\": string}. score nằm từ 0 đến 1.",
-            `BÁO MẤT: ${JSON.stringify(report)}`,
-            `ĐỒ TÌM THẤY: ${JSON.stringify(item)}`,
-            "Chấm điểm dựa trên tên, danh mục, đặc điểm, thời gian và địa điểm. Thiếu dữ liệu thì giảm điểm.",
-          ].join("\n"),
-        }],
+        parts: [textPart, ...imageParts],
       }],
       generationConfig: { responseMimeType: "application/json" },
     }),
@@ -100,6 +123,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
        lr.lost_location, lr.lost_at, lr.status AS report_status,
        fi.id AS item_id, fi.item_name, fi.category, fi.description,
        fi.found_location, fi.found_at, fi.status AS item_status, fi.tracking_code
+       , lr.image_object_keys AS report_image_object_keys, fi.image_object_keys AS item_image_object_keys
      FROM lost_reports lr
      JOIN found_items fi ON fi.id = $2
      WHERE lr.id = $1`,
@@ -119,6 +143,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
     description: row.report_description,
     lost_location: row.lost_location,
     lost_at: row.lost_at,
+    image_object_keys: row.report_image_object_keys,
   };
   const itemData = {
     item_name: row.item_name,
@@ -126,6 +151,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
     description: row.description,
     found_location: row.found_location,
     found_at: row.found_at,
+    image_object_keys: row.item_image_object_keys,
   };
   let result = findExactMatch(reportData, itemData);
   let provider = "deterministic";

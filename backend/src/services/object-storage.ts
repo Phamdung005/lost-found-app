@@ -115,3 +115,22 @@ export async function createObjectReadUrls(keys: unknown): Promise<string[]> {
   const validKeys = keys.filter((key): key is string => typeof key === "string" && key.trim().length > 0);
   return Promise.all(validKeys.map((key) => createObjectReadUrl(key)));
 }
+
+export async function readObject(
+  key: string,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const { client, config } = getClient();
+  if (!key.trim()) throw new Error("Object key không được để trống");
+
+  const response = await client.send(new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+  }));
+  if (!response.Body) throw new Error(`Không đọc được object ${key}`);
+
+  const bytes = await response.Body.transformToByteArray();
+  return {
+    bytes,
+    contentType: response.ContentType || "image/jpeg",
+  };
+}
