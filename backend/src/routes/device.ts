@@ -183,7 +183,7 @@ router.post("/commands/:id/ack", authenticateDevice, async (req: Request, res: R
     await client.query("BEGIN");
 
     const cmdCheck = await client.query(
-      `SELECT c.id, c.slot_id, s.slot_code, c.command_type
+      `SELECT c.id, c.slot_id, s.slot_code, c.command_type, c.parameters
        FROM locker_commands c
        LEFT JOIN locker_slots s ON c.slot_id = s.id
        WHERE c.id = $1 AND c.locker_id = $2
@@ -199,6 +199,7 @@ router.post("/commands/:id/ack", authenticateDevice, async (req: Request, res: R
 
     const command = cmdCheck.rows[0];
     const isSuccess = status === "success";
+    const commandParameters = command.parameters || {};
 
     // Cập nhật trạng thái lệnh
     await client.query(
@@ -232,6 +233,66 @@ router.post("/commands/:id/ack", authenticateDevice, async (req: Request, res: R
         );
       } catch (logErr) {
         console.warn("Could not insert access_log:", logErr);
+      }
+    }
+
+    const claimId = Number(commandParameters.claim_id);
+    if (isSuccess && commandParameters.release_item === true && command.slot_id) {
+      await client.query(
+        `UPDATE found_items
+         SET status = 'returned', updated_at = now()
+         WHERE (slot_id = $1 OR locker_slot_id = $1)
+           AND status IN ('in_locker', 'stored', 'reported')`,
+        [command.slot_id]
+      );
+      await client.query(
+        `UPDATE found_item_claims
+         SET status = 'claimed', claimed_at = now(), updated_at = now()
+         WHERE found_item_id IN (
+           SELECT id FROM found_items WHERE (slot_id = $1 OR locker_slot_id = $1)
+         ) AND status IN ('pending', 'approved')`,
+        [command.slot_id]
+      );
+      await client.query(
+        `UPDATE locker_slots
+         SET occupancy_status = 'empty', status = 'empty', updated_at = now()
+         WHERE id = $1`,
+        [command.slot_id]
+      );
+    }
+
+    if (Number.isInteger(claimId) && claimId > 0) {
+      if (isSuccess) {
+        await client.query(
+          `UPDATE found_item_claims
+           SET status = 'completed', claimed_at = now(), claim_code = NULL, updated_at = now()
+           WHERE id = $1 AND status = 'redeeming'`,
+          [claimId]
+        );
+        await client.query(
+          `UPDATE found_items
+           SET status = 'returned', updated_at = now()
+           WHERE id = (SELECT found_item_id FROM found_item_claims WHERE id = $1)`,
+          [claimId]
+        );
+        await client.query(
+          `UPDATE locker_slots
+           SET occupancy_status = 'empty', status = 'empty', updated_at = now()
+           WHERE id = $1`,
+          [command.slot_id]
+        );
+        await client.query(
+          `INSERT INTO access_logs (slot_id, action, actor, success, reason)
+           VALUES ($1, 'RETRIEVE_ITEM', 'DEVICE_ACK', true, $2)`,
+          [command.slot_id, result_message || "Thiết bị đã mở ngăn nhận đồ thành công"]
+        );
+      } else {
+        await client.query(
+          `UPDATE found_item_claims
+           SET status = 'approved', updated_at = now()
+           WHERE id = $1 AND status = 'redeeming'`,
+          [claimId]
+        );
       }
     }
 
@@ -370,35 +431,6 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
       adminId,
       slot.is_simulation_mode,
     ]);
-
-    // Nếu Admin chọn "Mở ngăn & Lấy đồ ra" -> Cập nhật đồ đã trả và giải phóng ngăn tủ về Trống
-    if (release_item === true) {
-      // 1. Cập nhật đồ vật trong ngăn sang 'returned'
-      await pool.query(
-        `UPDATE found_items 
-         SET status = 'returned', updated_at = now() 
-         WHERE (slot_id = $1 OR locker_slot_id = $1) AND status IN ('in_locker', 'stored', 'reported')`,
-        [slot.id]
-      );
-
-      // 2. Cập nhật các yêu cầu nhận đồ (nếu có)
-      await pool.query(
-        `UPDATE found_item_claims 
-         SET status = 'claimed', claimed_at = now(), updated_at = now() 
-         WHERE found_item_id IN (
-           SELECT id FROM found_items WHERE (slot_id = $1 OR locker_slot_id = $1)
-         ) AND status IN ('pending', 'approved')`,
-        [slot.id]
-      );
-
-      // 3. Giải phóng ngăn tủ về trống
-      await pool.query(
-        `UPDATE locker_slots 
-         SET occupancy_status = 'empty', status = 'empty', updated_at = now() 
-         WHERE id = $1`,
-        [slot.id]
-      );
-    }
 
     await logAudit(adminId!, "ADMIN_COMMAND_ISSUED", {
       command_id: cmdRes.rows[0].id,

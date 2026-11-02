@@ -467,48 +467,32 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
       return;
     }
 
-    // Nếu hợp lệ: Cập nhật hoàn tất trao trả
+    // Giữ dữ liệu nhất quán cho đến khi thiết bị xác nhận đã mở thành công.
     const now = new Date();
     await client.query(
       `UPDATE found_item_claims 
-       SET status = 'completed', claimed_at = $1, claim_code = NULL, updated_at = $1
+       SET status = 'redeeming', updated_at = $1
        WHERE id = $2`,
       [now, claim.id]
     );
 
-    // Cập nhật trạng thái đồ vật: returned
-    await client.query(
-      "UPDATE found_items SET status = 'returned', updated_at = $1 WHERE id = $2",
-      [now, claim.found_item_id]
-    );
-
-    // Giải phóng ngăn tủ (nếu đồ có lưu trong ngăn)
+    // Tạo lệnh trước; chỉ giải phóng ngăn sau khi ESP32 ACK thành công.
     if (claim.slot_id) {
-      await client.query(
-        `UPDATE locker_slots 
-         SET occupancy_status = 'empty', status = 'empty', updated_at = $1 
-         WHERE id = $2`,
-        [now, claim.slot_id]
-      );
-
-      // Kích hoạt servo mở tủ cho người dùng
       if (claim.locker_id) {
         await client.query(
           `INSERT INTO locker_commands (locker_id, slot_id, command_type, status, parameters)
            VALUES ($1, $2, 'OPEN_SLOT', 'pending', $3)`,
-          [claim.locker_id, claim.slot_id, JSON.stringify({ duration_ms: 10000, reason: "USER_REDEEM_OTP" })]
+          [
+            claim.locker_id,
+            claim.slot_id,
+            JSON.stringify({
+              duration_ms: 10000,
+              reason: "USER_REDEEM_OTP",
+              claim_id: claim.id,
+              release_item: true,
+            }),
+          ]
         );
-      }
-
-      // Ghi access_logs
-      try {
-        await client.query(
-          `INSERT INTO access_logs (slot_id, action, actor, success, reason)
-           VALUES ($1, 'RETRIEVE_ITEM', $2, true, 'Người dùng đã dùng mã OTP nhận đồ thành công')`,
-          [claim.slot_id, req.user?.email || "User"]
-        );
-      } catch (logErr) {
-        console.warn("Could not insert access_log:", logErr);
       }
     }
 
@@ -524,8 +508,8 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
     if (claim.user_id) {
       await createNotification({
         userId: claim.user_id,
-        title: "Nhận lại đồ thành công",
-        message: `Ngăn ${claim.slot_code || "lưu trữ"} đã mở. Bạn đã nhận lại món đồ "${claim.item_name}". Cảm ơn bạn đã tin tưởng FindBox!`,
+        title: "Đang mở ngăn nhận đồ",
+        message: `Mã nhận đồ hợp lệ. Hệ thống đang mở ngăn ${claim.slot_code || "lưu trữ"} để bạn nhận "${claim.item_name}".`,
         type: "success",
       });
     }
@@ -533,14 +517,14 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
     // Thông báo cho Admin
     await createNotification({
       role: "admin",
-      title: `Đồ vật đã trao trả (${claim.slot_code || "Ngăn tủ"})`,
-      message: `Người dùng đã mở ngăn ${claim.slot_code || ""} lấy lại "${claim.item_name}". Ngăn tủ đã chuyển sang trạng thái Trống.`,
+      title: `Đang xử lý nhận đồ (${claim.slot_code || "Ngăn tủ"})`,
+      message: `Mã nhận đồ của "${claim.item_name}" đã được xác thực và lệnh mở ngăn đang chờ thiết bị.`,
       type: "locker",
     });
 
     res.json({
       success: true,
-      message: `Xác nhận mã nhận đồ thành công! Ngăn ${claim.slot_code || "lưu trữ"} đã được mở để quý khách nhận đồ.`,
+      message: `Xác nhận mã nhận đồ thành công! Lệnh mở ngăn ${claim.slot_code || "lưu trữ"} đang được gửi tới thiết bị.`,
       data: {
         slot_code: claim.slot_code,
         locker_code: claim.locker_code,
