@@ -22,6 +22,41 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(cors());
 app.use(express.json());
 
+const ESP32_GPIO_PINS = new Set([0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33]);
+const ESP32_INPUT_ONLY_PINS = new Set([34, 35, 36, 39]);
+
+function parseHardwareConfig(body: Record<string, unknown>) {
+  const hardwareEnabled = body.hardware_enabled === true;
+  const servoPin: number | null = body.servo_pin === null || body.servo_pin === undefined || body.servo_pin === ""
+    ? null
+    : Number(body.servo_pin);
+  const sensorPin: number | null = body.sensor_pin === null || body.sensor_pin === undefined || body.sensor_pin === ""
+    ? null
+    : Number(body.sensor_pin);
+
+  if (!hardwareEnabled) {
+    return { hardwareEnabled: false, servoPin: null, sensorPin: null };
+  }
+
+  if (servoPin === null || sensorPin === null || !Number.isInteger(servoPin) || !Number.isInteger(sensorPin)) {
+    throw new Error("Ngăn có phần cứng phải khai báo servo_pin và sensor_pin");
+  }
+  if (!ESP32_GPIO_PINS.has(servoPin) && !ESP32_INPUT_ONLY_PINS.has(servoPin)) {
+    throw new Error(`GPIO servo không hợp lệ: ${servoPin}`);
+  }
+  if (!ESP32_GPIO_PINS.has(sensorPin) && !ESP32_INPUT_ONLY_PINS.has(sensorPin)) {
+    throw new Error(`GPIO cảm biến không hợp lệ: ${sensorPin}`);
+  }
+  if (ESP32_INPUT_ONLY_PINS.has(servoPin)) {
+    throw new Error(`GPIO ${servoPin} chỉ dùng làm input, không thể điều khiển servo`);
+  }
+  if (servoPin === sensorPin) {
+    throw new Error("GPIO servo và cảm biến không được trùng nhau");
+  }
+
+  return { hardwareEnabled: true, servoPin, sensorPin };
+}
+
 // Routes
 app.use("/api/auth", authRouter);
 app.use("/api/found-items", foundItemsRouter);
@@ -87,6 +122,9 @@ app.get("/api/lockers/:lockerCode/slots", async (req, res) => {
           COALESCE(s.occupancy_status, s.status, 'empty') AS occupancy_status,
           COALESCE(s.door_status, 'closed') AS door_status,
           COALESCE(s.device_status, 'online') AS device_status,
+          s.hardware_enabled,
+          s.servo_pin,
+          s.sensor_pin,
           s.status
         FROM lockers l
         JOIN locker_slots s ON s.locker_id = l.id
@@ -118,6 +156,13 @@ app.post(
     try {
       const { lockerCode } = req.params;
       let { slot_code } = req.body;
+      let hardwareConfig;
+      try {
+        hardwareConfig = parseHardwareConfig(req.body);
+      } catch (error) {
+        res.status(400).json({ success: false, message: error instanceof Error ? error.message : "Cấu hình phần cứng không hợp lệ" });
+        return;
+      }
 
       const lockerRes = await pool.query(
         "SELECT id FROM lockers WHERE locker_code = $1",
@@ -130,7 +175,7 @@ app.post(
       const lockerId = lockerRes.rows[0].id;
 
       // Nếu không nhập slot_code, tự động sinh mã kế tiếp (A01, A02 -> A03...)
-      if (!slot_code || !slot_code.trim()) {
+      if (typeof slot_code !== "string" || !slot_code.trim()) {
         const existingSlots = await pool.query(
           "SELECT slot_code FROM locker_slots WHERE locker_id = $1 ORDER BY id DESC",
           [lockerId]
@@ -140,6 +185,11 @@ app.post(
         slot_code = `A${nextNum}`;
       } else {
         slot_code = slot_code.trim().toUpperCase();
+      }
+
+      if (!/^[A-Z][A-Z0-9_-]{0,49}$/.test(slot_code)) {
+        res.status(400).json({ success: false, message: "Mã ngăn chỉ gồm chữ cái, số, gạch ngang hoặc gạch dưới" });
+        return;
       }
 
       // Kiểm tra trùng mã ngăn
@@ -156,10 +206,14 @@ app.post(
       }
 
       const insertRes = await pool.query(
-        `INSERT INTO locker_slots (locker_id, slot_code, status, occupancy_status, door_status, device_status)
-         VALUES ($1, $2, 'empty', 'empty', 'closed', 'online')
-         RETURNING id, locker_id, slot_code, status, occupancy_status, door_status, device_status`,
-        [lockerId, slot_code]
+        `INSERT INTO locker_slots (
+           locker_id, slot_code, status, occupancy_status, door_status, device_status,
+           hardware_enabled, servo_pin, sensor_pin
+         )
+         VALUES ($1, $2, 'empty', 'empty', 'closed', 'online', $3, $4, $5)
+         RETURNING id, locker_id, slot_code, status, occupancy_status, door_status, device_status,
+                   hardware_enabled, servo_pin, sensor_pin`,
+        [lockerId, slot_code, hardwareConfig.hardwareEnabled, hardwareConfig.servoPin, hardwareConfig.sensorPin]
       );
 
       res.status(201).json({
@@ -167,9 +221,61 @@ app.post(
         message: `Đã thêm ngăn tủ ${slot_code} thành công`,
         data: insertRes.rows[0],
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === "23505") {
+        res.status(400).json({ success: false, message: "GPIO đã được sử dụng bởi một ngăn phần cứng khác" });
+        return;
+      }
       console.error("Add slot failed:", error);
       res.status(500).json({ success: false, message: "Lỗi khi thêm ngăn tủ" });
+    }
+  }
+);
+
+// 2. Cập nhật cấu hình phần cứng của ngăn (Admin)
+app.patch(
+  "/api/lockers/slots/:slotId/config",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      let hardwareConfig;
+      try {
+        hardwareConfig = parseHardwareConfig(req.body);
+      } catch (error) {
+        res.status(400).json({ success: false, message: error instanceof Error ? error.message : "Cấu hình phần cứng không hợp lệ" });
+        return;
+      }
+
+      const slotRes = await pool.query(
+        "SELECT id, slot_code, occupancy_status FROM locker_slots WHERE id = $1",
+        [req.params.slotId]
+      );
+      if (slotRes.rowCount === 0) {
+        res.status(404).json({ success: false, message: "Không tìm thấy ngăn tủ" });
+        return;
+      }
+      if (slotRes.rows[0].occupancy_status === "occupied") {
+        res.status(400).json({ success: false, message: `Ngăn ${slotRes.rows[0].slot_code} đang chứa đồ, không thể đổi cấu hình phần cứng` });
+        return;
+      }
+
+      const result = await pool.query(
+        `UPDATE locker_slots
+         SET hardware_enabled = $1, servo_pin = $2, sensor_pin = $3, updated_at = now()
+         WHERE id = $4
+         RETURNING id, slot_code, hardware_enabled, servo_pin, sensor_pin`,
+        [hardwareConfig.hardwareEnabled, hardwareConfig.servoPin, hardwareConfig.sensorPin, req.params.slotId]
+      );
+
+      res.json({ success: true, message: `Đã cập nhật cấu hình phần cứng cho ngăn ${result.rows[0].slot_code}`, data: result.rows[0] });
+    } catch (error: any) {
+      if (error?.code === "23505") {
+        res.status(400).json({ success: false, message: "GPIO đã được sử dụng bởi một ngăn phần cứng khác" });
+        return;
+      }
+      console.error("Update slot hardware config failed:", error);
+      res.status(500).json({ success: false, message: "Lỗi khi cập nhật cấu hình phần cứng" });
     }
   }
 );
