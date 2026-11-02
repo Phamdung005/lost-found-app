@@ -40,6 +40,9 @@ export async function runBusinessMigration() {
         occupancy_status VARCHAR(20) DEFAULT 'empty',
         door_status VARCHAR(20) DEFAULT 'closed',
         device_status VARCHAR(20) DEFAULT 'online',
+        hardware_enabled BOOLEAN NOT NULL DEFAULT false,
+        servo_pin INT,
+        sensor_pin INT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE(locker_id, slot_code)
@@ -52,13 +55,56 @@ export async function runBusinessMigration() {
       ADD COLUMN IF NOT EXISTS occupancy_status VARCHAR(20) DEFAULT 'empty',
       ADD COLUMN IF NOT EXISTS door_status VARCHAR(20) DEFAULT 'closed',
       ADD COLUMN IF NOT EXISTS device_status VARCHAR(20) DEFAULT 'online',
+      ADD COLUMN IF NOT EXISTS hardware_enabled BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS servo_pin INT,
+      ADD COLUMN IF NOT EXISTS sensor_pin INT,
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+    `);
+
+    await client.query(`
+      UPDATE locker_slots
+      SET hardware_enabled = true,
+          servo_pin = CASE slot_code
+            WHEN 'A01' THEN 18
+            WHEN 'A02' THEN 19
+            ELSE servo_pin
+          END,
+          sensor_pin = CASE slot_code
+            WHEN 'A01' THEN 4
+            WHEN 'A02' THEN 5
+            ELSE sensor_pin
+          END
+      WHERE locker_id = (SELECT id FROM lockers WHERE locker_code = 'L-001')
+        AND slot_code IN ('A01', 'A02')
+        AND (servo_pin IS NULL OR sensor_pin IS NULL);
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_locker_slots_servo_pin
+      ON locker_slots (servo_pin)
+      WHERE hardware_enabled = true AND servo_pin IS NOT NULL;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_locker_slots_sensor_pin
+      ON locker_slots (sensor_pin)
+      WHERE hardware_enabled = true AND sensor_pin IS NOT NULL;
     `);
 
     // Khởi tạo 2 ngăn A01, A02 mẫu cho tủ L-001 nếu chưa có
     await client.query(`
-      INSERT INTO locker_slots (locker_id, slot_code, status, occupancy_status, door_status, device_status)
-      SELECT l.id, s.code, 'empty', 'empty', 'closed', 'online'
+      INSERT INTO locker_slots (
+        locker_id, slot_code, status, occupancy_status, door_status, device_status,
+        hardware_enabled, servo_pin, sensor_pin
+      )
+      SELECT
+        l.id,
+        s.code,
+        'empty',
+        'empty',
+        'closed',
+        'online',
+        true,
+        CASE s.code WHEN 'A01' THEN 18 WHEN 'A02' THEN 19 END,
+        CASE s.code WHEN 'A01' THEN 4 WHEN 'A02' THEN 5 END
       FROM lockers l
       CROSS JOIN (VALUES ('A01'), ('A02')) AS s(code)
       WHERE l.locker_code = 'L-001'
