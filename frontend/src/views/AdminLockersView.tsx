@@ -23,15 +23,16 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config/api';
+import type { CommandHistory, LockerSlot, LockerStatus } from '../api/types';
 
 const { Title, Text } = Typography;
 
 export const AdminLockersView: React.FC = () => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [deviceStatus, setDeviceStatus] = useState<any>(null);
-  const [slots, setSlots] = useState<any[]>([]);
-  const [commandHistory, setCommandHistory] = useState<any[]>([]);
+  const [deviceStatus, setDeviceStatus] = useState<LockerStatus | null>(null);
+  const [slots, setSlots] = useState<LockerSlot[]>([]);
+  const [commandHistory, setCommandHistory] = useState<CommandHistory[]>([]);
   const [unlockingSlot, setUnlockingSlot] = useState<string | null>(null);
 
   // Modal thêm ngăn tủ
@@ -41,7 +42,7 @@ export const AdminLockersView: React.FC = () => {
   const [newServoPin, setNewServoPin] = useState<number | null>(null);
   const [newSensorPin, setNewSensorPin] = useState<number | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
-  const [configSlot, setConfigSlot] = useState<any | null>(null);
+  const [configSlot, setConfigSlot] = useState<LockerSlot | null>(null);
   const [configHardwareEnabled, setConfigHardwareEnabled] = useState(false);
   const [configServoPin, setConfigServoPin] = useState<number | null>(null);
   const [configSensorPin, setConfigSensorPin] = useState<number | null>(null);
