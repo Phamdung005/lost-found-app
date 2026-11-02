@@ -135,7 +135,8 @@ export async function runBusinessMigration() {
     await client.query(`
       ALTER TABLE found_items 
       ADD COLUMN IF NOT EXISTS slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS locker_slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL;
+      ADD COLUMN IF NOT EXISTS locker_slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS image_object_key TEXT;
       UPDATE found_items SET status = 'in_locker' WHERE status = 'stored';
     `);
 
@@ -155,6 +156,11 @@ export async function runBusinessMigration() {
         created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now()
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE lost_reports
+      ADD COLUMN IF NOT EXISTS image_object_key TEXT;
     `);
 
     await client.query(`

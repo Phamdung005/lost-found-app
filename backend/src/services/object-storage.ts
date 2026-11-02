@@ -45,23 +45,29 @@ function getObjectStorageConfig(): ObjectStorageConfig {
   };
 }
 
-const config = getObjectStorageConfig();
+let client: S3Client | null = null;
+let config: ObjectStorageConfig | null = null;
 
-export const objectStorageClient = new S3Client({
-  endpoint: config.endpoint,
-  region: config.region,
-  forcePathStyle: config.forcePathStyle,
-  credentials: {
-    accessKeyId: config.accessKeyId,
-    secretAccessKey: config.secretAccessKey,
-  },
-});
-
-export const objectStorageBucket = config.bucket;
+function getClient(): { client: S3Client; config: ObjectStorageConfig } {
+  if (!client || !config) {
+    config = getObjectStorageConfig();
+    client = new S3Client({
+      endpoint: config.endpoint,
+      region: config.region,
+      forcePathStyle: config.forcePathStyle,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+    });
+  }
+  return { client, config };
+}
 
 export async function ensureObjectStorageBucket(): Promise<void> {
+  const { client, config } = getClient();
   try {
-    await objectStorageClient.send(new HeadBucketCommand({ Bucket: objectStorageBucket }));
+    await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
   } catch (error: unknown) {
     const statusCode =
       typeof error === "object" && error !== null && "$metadata" in error
@@ -69,7 +75,7 @@ export async function ensureObjectStorageBucket(): Promise<void> {
         : undefined;
     if (statusCode !== 404 && statusCode !== 400) throw error;
 
-    await objectStorageClient.send(new CreateBucketCommand({ Bucket: objectStorageBucket }));
+    await client.send(new CreateBucketCommand({ Bucket: config.bucket }));
   }
 }
 
@@ -78,11 +84,12 @@ export async function uploadObject(
   body: Uint8Array | Buffer,
   contentType: string,
 ): Promise<void> {
+  const { client, config } = getClient();
   if (!key.trim()) throw new Error("Object key không được để trống");
   if (!contentType.trim()) throw new Error("Content-Type không được để trống");
 
-  await objectStorageClient.send(new PutObjectCommand({
-    Bucket: objectStorageBucket,
+  await client.send(new PutObjectCommand({
+    Bucket: config.bucket,
     Key: key,
     Body: body,
     ContentType: contentType,
@@ -90,12 +97,13 @@ export async function uploadObject(
 }
 
 export async function createObjectReadUrl(key: string): Promise<string> {
+  const { client, config } = getClient();
   if (!key.trim()) throw new Error("Object key không được để trống");
 
   return getSignedUrl(
-    objectStorageClient,
+    client,
     new GetObjectCommand({
-      Bucket: objectStorageBucket,
+      Bucket: config.bucket,
       Key: key,
     }),
     { expiresIn: config.presignedUrlTtlSeconds },

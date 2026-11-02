@@ -8,6 +8,7 @@ import foundItemsRouter from "./routes/found_items.js";
 import claimsRouter from "./routes/claims.js";
 import deviceRouter from "./routes/device.js";
 import notificationsRouter from "./routes/notifications.js";
+import uploadsRouter from "./routes/uploads.js";
 import { runAuthMigration } from "./migrations/init_auth.js";
 import { runBusinessMigration } from "./migrations/init_business.js";
 import { runDeviceMigration } from "./migrations/init_device.js";
@@ -32,6 +33,7 @@ app.use("/api/found-items", foundItemsRouter);
 app.use("/api/claims", claimsRouter);
 app.use("/api/device", deviceRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/uploads", uploadsRouter);
 
 app.get("/api/db-check", async (_req, res) => {
   try {
