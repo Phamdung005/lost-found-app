@@ -265,9 +265,22 @@ export const AdminReportsView: React.FC = () => {
                       <Text type="secondary" style={{ fontSize: 12 }}>Người yêu cầu: </Text>
                       <Text strong>{claim.claimer_name || 'Người dùng'}</Text> ({claim.claimer_email})
                     </div>
-                    <div>
+                    <div style={{ marginBottom: 8 }}>
                       <Text type="secondary" style={{ fontSize: 12 }}>Bằng chứng cung cấp: </Text>
                       <span style={{ fontWeight: 600, color: '#1e40af' }}>{claim.proof_description}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
+                      <div style={{ color: '#475569', fontSize: 12, marginBottom: 3 }}>
+                        Mô tả trong báo mất của người yêu cầu:
+                      </div>
+                      <div style={{ fontWeight: 600, color: '#166534' }}>
+                        {claim.lost_report_description || 'Chưa có báo mất tương ứng trong hệ thống.'}
+                      </div>
+                      {claim.reported_lost_location && (
+                        <div style={{ color: '#64748b', fontSize: 12, marginTop: 3 }}>
+                          Địa điểm báo mất: {claim.reported_lost_location}
+                        </div>
+                      )}
                     </div>
                   </div>
 

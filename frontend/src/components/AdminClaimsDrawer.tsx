@@ -148,6 +148,20 @@ export const AdminClaimsDrawer: React.FC<AdminClaimsDrawerProps> = ({
               <Text italic>{record.item_secret_description}</Text>
             </div>
           )}
+          <div style={{ background: '#f0fdf4', padding: 6, borderRadius: 4, marginTop: 6 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Mô tả trong báo mất của người yêu cầu:
+            </Text>
+            <br />
+            <Text strong style={{ color: '#166534' }}>
+              {record.lost_report_description || 'Chưa có báo mất tương ứng trong hệ thống.'}
+            </Text>
+            {record.reported_lost_location && (
+              <div style={{ color: '#64748b', fontSize: 11, marginTop: 3 }}>
+                Địa điểm báo mất: {record.reported_lost_location}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },

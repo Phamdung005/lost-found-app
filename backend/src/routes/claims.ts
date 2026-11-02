@@ -184,11 +184,21 @@ router.get("/", authenticateToken, requireAdmin, async (req: AuthenticatedReques
         f.tracking_code,
         f.description as item_secret_description,
         f.image_url,
+        lr.description as lost_report_description,
+        lr.lost_location as reported_lost_location,
         s.slot_code,
         l.locker_code
       FROM found_item_claims c
       JOIN users u ON c.user_id = u.id
       JOIN found_items f ON c.found_item_id = f.id
+      LEFT JOIN LATERAL (
+        SELECT description, lost_location
+        FROM lost_reports
+        WHERE user_id = c.user_id
+          AND LOWER(TRIM(item_name)) = LOWER(TRIM(f.item_name))
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) lr ON true
       LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
       LEFT JOIN lockers l ON s.locker_id = l.id
     `;
@@ -238,11 +248,21 @@ router.get("/pending", authenticateToken, requireAdmin, async (_req: Authenticat
          f.tracking_code,
          f.description as item_secret_description,
          f.image_url,
+         lr.description as lost_report_description,
+         lr.lost_location as reported_lost_location,
          s.slot_code,
          l.locker_code
        FROM found_item_claims c
        JOIN users u ON c.user_id = u.id
        JOIN found_items f ON c.found_item_id = f.id
+       LEFT JOIN LATERAL (
+         SELECT description, lost_location
+         FROM lost_reports
+         WHERE user_id = c.user_id
+           AND LOWER(TRIM(item_name)) = LOWER(TRIM(f.item_name))
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) lr ON true
        LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
        LEFT JOIN lockers l ON s.locker_id = l.id
        WHERE c.status = 'pending'
