@@ -24,6 +24,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config/api';
 import type { CommandHistory, LockerSlot, LockerStatus } from '../api/types';
+import {
+  getCommandHistory,
+  getLockerSlots,
+  getLockerStatus,
+} from '../api/lockers';
 
 const { Title, Text } = Typography;
 
@@ -52,27 +57,15 @@ export const AdminLockersView: React.FC = () => {
     if (!isSilent) setLoading(true);
     try {
       const [statusRes, slotsRes, historyRes] = await Promise.all([
-        fetch(`${API_BASE}/device/status`),
-        fetch(`${API_BASE}/lockers/L-001/slots`),
-        fetch(`${API_BASE}/device/commands/history`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+        getLockerStatus(),
+        getLockerSlots('L-001'),
+        token ? getCommandHistory(token) : Promise.resolve({ success: true as const, data: [] }),
       ]);
-
-      if (statusRes.ok) {
-        const sData = await statusRes.json();
-        setDeviceStatus(sData.data || null);
-      }
-      if (slotsRes.ok) {
-        const slData = await slotsRes.json();
-        setSlots(slData.data || []);
-      }
-      if (historyRes.ok) {
-        const hData = await historyRes.json();
-        setCommandHistory(hData.data || []);
-      }
+      setDeviceStatus(statusRes.data);
+      setSlots(slotsRes.data);
+      setCommandHistory(historyRes.data);
     } catch (err) {
-      console.error(err);
+      console.error('Không thể tải dữ liệu tủ:', err);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -96,7 +89,7 @@ export const AdminLockersView: React.FC = () => {
     setAddModalOpen(true);
   };
 
-  const handleOpenConfigModal = (slot: any) => {
+  const handleOpenConfigModal = (slot: LockerSlot) => {
     setConfigSlot(slot);
     setConfigHardwareEnabled(Boolean(slot.hardware_enabled));
     setConfigServoPin(slot.servo_pin ?? null);

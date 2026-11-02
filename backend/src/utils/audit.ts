@@ -3,7 +3,7 @@ import { pool } from "../db.js";
 export async function logAudit(
   userId: number | null,
   action: string,
-  details: Record<string, any> = {},
+  details: Record<string, unknown> = {},
   ipAddress: string | null = null
 ): Promise<void> {
   try {
