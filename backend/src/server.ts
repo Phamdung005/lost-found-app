@@ -483,7 +483,7 @@ app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/lost-reports", async (req, res) => {
+app.post("/api/lost-reports", authenticateToken, async (req, res) => {
   try {
     const {
       item_name,
@@ -507,21 +507,7 @@ app.post("/api/lost-reports", async (req, res) => {
       });
       return;
     }
-
-    // Lấy user_id nếu có Bearer token
-    let userId: number | null = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      try {
-        const parts = authHeader.split(" ");
-        const token = parts[1];
-        if (token) {
-          const secret = process.env.JWT_SECRET || "findbox_super_secret_jwt_key_2026_demo";
-          const decoded = jwt.verify(token, secret) as any;
-          if (decoded?.id) userId = Number(decoded.id);
-        }
-      } catch {}
-    }
+    const userId = (req as AuthenticatedRequest).user?.id ?? null;
 
     const result = await pool.query(
       `INSERT INTO lost_reports
