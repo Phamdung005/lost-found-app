@@ -7,6 +7,7 @@ import {
   DashboardOutlined,
   FileTextOutlined,
   ThunderboltOutlined,
+  InboxOutlined,
 } from '@ant-design/icons';
 
 interface BottomNavBarProps {
@@ -32,6 +33,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   const adminTabs = [
     { key: 'admin_overview', label: 'Tổng quan', icon: <DashboardOutlined className="nav-icon" /> },
     { key: 'admin_reports', label: 'Báo cáo', icon: <FileTextOutlined className="nav-icon" /> },
+    { key: 'admin_items', label: 'Đồ lưu trữ', icon: <InboxOutlined className="nav-icon" /> },
     { key: 'admin_lockers', label: 'Tủ IoT', icon: <ThunderboltOutlined className="nav-icon" /> },
     { key: 'admin_account', label: 'Tài khoản', icon: <UserOutlined className="nav-icon" /> },
   ];
