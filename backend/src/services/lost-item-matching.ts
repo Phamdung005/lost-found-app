@@ -67,6 +67,14 @@ function getGeminiConfig(): { apiKey: string; model: string } | null {
   };
 }
 
+export function getGeminiStatus(): { configured: boolean; model: string } {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  return {
+    configured: Boolean(apiKey),
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash",
+  };
+}
+
 function parseGeminiResult(text: string): GeminiMatchResult {
   const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const parsed: unknown = JSON.parse(jsonText);
@@ -203,15 +211,16 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
       provider = "gemini";
       model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
     } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown matching error";
     await logAudit(null, "LOST_ITEM_MATCH_FAILED", {
       lost_report_id: reportId,
       found_item_id: foundItemId,
-      error: error instanceof Error ? error.message : "Unknown matching error",
+      error: errorMessage,
     });
     await createNotification({
       role: "admin",
       title: "⚠️ AI đối chiếu báo mất thất bại",
-      message: `Không thể đối chiếu đơn #${reportId} với món đồ #${foundItemId}. Kiểm tra cấu hình Gemini hoặc log hệ thống.`,
+      message: `Không thể đối chiếu đơn #${reportId} với món đồ #${foundItemId}: ${errorMessage}`,
       type: "warning",
     });
     return;

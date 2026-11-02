@@ -16,7 +16,7 @@ import { authenticateToken, requireAdmin } from "./middleware/auth.js";
 import type { AuthenticatedRequest } from "./middleware/auth.js";
 import { createNotification } from "./utils/notifications.js";
 import { parseHardwareConfig } from "./utils/hardware-config.js";
-import { matchLostReportAgainstFoundItems, scanOpenLostReports } from "./services/lost-item-matching.js";
+import { getGeminiStatus, matchLostReportAgainstFoundItems, scanOpenLostReports } from "./services/lost-item-matching.js";
 import { logAudit } from "./utils/audit.js";
 import { createObjectReadUrls } from "./services/object-storage.js";
 
@@ -715,6 +715,10 @@ app.get("/api/admin/check", authenticateToken, requireAdmin, (req, res) => {
     success: true,
     message: "Xác thực Admin hợp lệ",
     admin: (req as any).user,
+  });
+
+  app.get("/api/admin/ai-status", authenticateToken, requireAdmin, (_req, res) => {
+    res.json({ success: true, data: getGeminiStatus() });
   });
 });
 
