@@ -1,64 +1,39 @@
-import {
-  CreateBucketCommand,
-  HeadBucketCommand,
-  PutObjectCommand,
-  GetObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 interface ObjectStorageConfig {
-  endpoint: string;
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  url: string;
+  serviceRoleKey: string;
   bucket: string;
-  forcePathStyle: boolean;
-  presignedUrlTtlSeconds: number;
+  signedUrlTtlSeconds: number;
 }
 
 function getObjectStorageConfig(): ObjectStorageConfig {
-  const endpoint = process.env.MINIO_ENDPOINT?.trim();
-  const accessKeyId = process.env.MINIO_ACCESS_KEY?.trim();
-  const secretAccessKey = process.env.MINIO_SECRET_KEY?.trim();
-  const bucket = process.env.MINIO_BUCKET?.trim();
+  const url = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim();
 
-  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
+  if (!url || !serviceRoleKey || !bucket) {
     throw new Error(
-      "Chưa cấu hình đầy đủ MinIO: MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET",
+      "Chưa cấu hình Supabase Storage: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET",
     );
   }
 
-  const ttl = Number(process.env.MINIO_PRESIGNED_URL_TTL_SECONDS || "900");
+  const ttl = Number(process.env.SUPABASE_SIGNED_URL_TTL_SECONDS || "900");
   if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) {
-    throw new Error("MINIO_PRESIGNED_URL_TTL_SECONDS phải nằm trong khoảng 60-86400");
+    throw new Error("SUPABASE_SIGNED_URL_TTL_SECONDS phải nằm trong khoảng 60-86400");
   }
 
-  return {
-    endpoint,
-    region: process.env.MINIO_REGION?.trim() || "us-east-1",
-    accessKeyId,
-    secretAccessKey,
-    bucket,
-    forcePathStyle: process.env.MINIO_FORCE_PATH_STYLE !== "false",
-    presignedUrlTtlSeconds: ttl,
-  };
+  return { url, serviceRoleKey, bucket, signedUrlTtlSeconds: ttl };
 }
 
-let client: S3Client | null = null;
+let client: SupabaseClient | null = null;
 let config: ObjectStorageConfig | null = null;
 
-function getClient(): { client: S3Client; config: ObjectStorageConfig } {
+function getClient(): { client: SupabaseClient; config: ObjectStorageConfig } {
   if (!client || !config) {
     config = getObjectStorageConfig();
-    client = new S3Client({
-      endpoint: config.endpoint,
-      region: config.region,
-      forcePathStyle: config.forcePathStyle,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
+    client = createClient(config.url, config.serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
   }
   return { client, config };
@@ -66,16 +41,17 @@ function getClient(): { client: S3Client; config: ObjectStorageConfig } {
 
 export async function ensureObjectStorageBucket(): Promise<void> {
   const { client, config } = getClient();
-  try {
-    await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
-  } catch (error: unknown) {
-    const statusCode =
-      typeof error === "object" && error !== null && "$metadata" in error
-        ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
-        : undefined;
-    if (statusCode !== 404 && statusCode !== 400) throw error;
+  const { data: buckets, error: listError } = await client.storage.listBuckets();
+  if (listError) throw new Error(`Không thể kiểm tra Supabase Storage: ${listError.message}`);
+  if (buckets.some((bucket) => bucket.name === config.bucket)) return;
 
-    await client.send(new CreateBucketCommand({ Bucket: config.bucket }));
+  const { error } = await client.storage.createBucket(config.bucket, {
+    public: false,
+    fileSizeLimit: "5242880",
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+  });
+  if (error && !/already exists/i.test(error.message)) {
+    throw new Error(`Không thể tạo bucket Supabase: ${error.message}`);
   }
 }
 
@@ -88,26 +64,24 @@ export async function uploadObject(
   if (!key.trim()) throw new Error("Object key không được để trống");
   if (!contentType.trim()) throw new Error("Content-Type không được để trống");
 
-  await client.send(new PutObjectCommand({
-    Bucket: config.bucket,
-    Key: key,
-    Body: body,
-    ContentType: contentType,
-  }));
+  const { error } = await client.storage.from(config.bucket).upload(key, body, {
+    contentType,
+    upsert: false,
+  });
+  if (error) throw new Error(`Không thể upload ảnh lên Supabase: ${error.message}`);
 }
 
 export async function createObjectReadUrl(key: string): Promise<string> {
   const { client, config } = getClient();
   if (!key.trim()) throw new Error("Object key không được để trống");
 
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({
-      Bucket: config.bucket,
-      Key: key,
-    }),
-    { expiresIn: config.presignedUrlTtlSeconds },
-  );
+  const { data, error } = await client.storage
+    .from(config.bucket)
+    .createSignedUrl(key, config.signedUrlTtlSeconds);
+  if (error || !data?.signedUrl) {
+    throw new Error(`Không thể tạo URL ảnh Supabase: ${error?.message || "URL rỗng"}`);
+  }
+  return data.signedUrl;
 }
 
 export async function createObjectReadUrls(keys: unknown): Promise<string[]> {
@@ -122,15 +96,13 @@ export async function readObject(
   const { client, config } = getClient();
   if (!key.trim()) throw new Error("Object key không được để trống");
 
-  const response = await client.send(new GetObjectCommand({
-    Bucket: config.bucket,
-    Key: key,
-  }));
-  if (!response.Body) throw new Error(`Không đọc được object ${key}`);
+  const { data, error } = await client.storage.from(config.bucket).download(key);
+  if (error || !data) {
+    throw new Error(`Không thể đọc ảnh Supabase: ${error?.message || "dữ liệu rỗng"}`);
+  }
 
-  const bytes = await response.Body.transformToByteArray();
   return {
-    bytes,
-    contentType: response.ContentType || "image/jpeg",
+    bytes: new Uint8Array(await data.arrayBuffer()),
+    contentType: data.type || "image/jpeg",
   };
 }
