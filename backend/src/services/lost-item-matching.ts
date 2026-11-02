@@ -107,7 +107,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
   );
   if (pair.rows.length === 0) return;
   const row = pair.rows[0];
-  if (row.report_status !== "searching" || row.item_status === "returned") return;
+  if (!["searching", "pending"].includes(row.report_status) || row.item_status === "returned") return;
 
   const existing = await pool.query(
     "SELECT id, status FROM lost_report_matches WHERE lost_report_id = $1 AND found_item_id = $2",
@@ -181,7 +181,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
 
   if (result.score >= threshold && row.report_user_id && existing.rows[0]?.status !== "notified") {
     await pool.query(
-      "UPDATE lost_reports SET status = 'found', updated_at = now() WHERE id = $1 AND status = 'searching'",
+      "UPDATE lost_reports SET status = 'found', updated_at = now() WHERE id = $1 AND status IN ('searching', 'pending')",
       [reportId],
     );
     await createNotification({
@@ -200,7 +200,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
 
 export async function matchFoundItemAgainstOpenReports(foundItemId: number): Promise<void> {
   const reports = await pool.query(
-    "SELECT id FROM lost_reports WHERE status = 'searching' ORDER BY created_at ASC",
+    "SELECT id FROM lost_reports WHERE status IN ('searching', 'pending') ORDER BY created_at ASC",
   );
   for (const report of reports.rows) {
     await matchLostReportWithFoundItem(Number(report.id), foundItemId);
@@ -218,7 +218,7 @@ export async function matchLostReportAgainstFoundItems(reportId: number): Promis
 
 export async function scanOpenLostReports(): Promise<void> {
   const reports = await pool.query(
-    "SELECT id FROM lost_reports WHERE status = 'searching' ORDER BY created_at ASC",
+    "SELECT id FROM lost_reports WHERE status IN ('searching', 'pending') ORDER BY created_at ASC",
   );
   for (const report of reports.rows) {
     await matchLostReportAgainstFoundItems(Number(report.id));

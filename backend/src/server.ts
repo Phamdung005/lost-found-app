@@ -467,8 +467,8 @@ app.post("/api/lost-reports", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO lost_reports
-       (item_name, category, description, lost_location, lost_at, reporter_contact, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (item_name, category, description, lost_location, lost_at, reporter_contact, user_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'searching')
        RETURNING id, item_name, category, description, lost_location,
                  lost_at, reporter_contact, user_id, status, created_at`,
       [

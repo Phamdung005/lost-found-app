@@ -173,6 +173,11 @@ export async function runBusinessMigration() {
       CREATE INDEX IF NOT EXISTS idx_lost_report_matches_report
         ON lost_report_matches(lost_report_id, score DESC);
     `);
+    await client.query(`
+      UPDATE lost_reports
+      SET status = 'searching', updated_at = now()
+      WHERE status = 'pending';
+    `);
 
     // 5. Tạo bảng found_item_claims
     await client.query(`
