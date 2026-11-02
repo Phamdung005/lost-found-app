@@ -180,7 +180,6 @@ export function App() {
               {currentTab === 'home' && (
                 <UserHomeView
                   onNavigateTab={handleNavigateTab}
-                  onOpenItemDetail={handleOpenItemDetail}
                 />
               )}
               {currentTab === 'search' && (

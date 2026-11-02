@@ -3,47 +3,50 @@ import { Typography, Input, Tag, Button, Empty, Spin, Space } from 'antd';
 import {
   SearchOutlined,
   InboxOutlined,
+  FileTextOutlined,
   QuestionCircleOutlined,
-  EnvironmentOutlined,
   ClockCircleOutlined,
   KeyOutlined,
   RightOutlined
 } from '@ant-design/icons';
 import { API_BASE } from '../config/api';
+import { useAuth } from '../context/AuthContext';
 
 const { Title, Text } = Typography;
 
 interface UserHomeViewProps {
   onNavigateTab: (tab: string, subParam?: any) => void;
-  onOpenItemDetail: (item: any) => void;
 }
 
 export const UserHomeView: React.FC<UserHomeViewProps> = ({
   onNavigateTab,
-  onOpenItemDetail,
 }) => {
-  const [recentItems, setRecentItems] = useState<any[]>([]);
+  const { token } = useAuth();
+  const [lostReports, setLostReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [quickSearch, setQuickSearch] = useState('');
 
-  const fetchRecentItems = async () => {
+  const fetchMyLostReports = async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/found-items?limit=4`);
+      const res = await fetch(`${API_BASE}/lost-reports/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (data.success) {
-        setRecentItems(data.data || []);
+        setLostReports((data.data || []).slice(0, 4));
       }
     } catch (err) {
-      console.error('Error fetching recent items:', err);
+      console.error('Không thể tải đơn báo mất:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void fetchRecentItems();
-  }, []);
+    void fetchMyLostReports();
+  }, [token]);
 
   const handleSearchSubmit = () => {
     if (quickSearch.trim()) {
@@ -142,16 +145,16 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
         </div>
       </div>
 
-      {/* Recent Public Found Items Section */}
+      {/* User's lost reports */}
       <div style={{ marginTop: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Title level={5} style={{ margin: 0, fontWeight: 700 }}>
-            Đồ vừa được gửi vào tủ
+            Đơn báo mất của tôi
           </Title>
           <Button
             type="link"
             size="small"
-            onClick={() => onNavigateTab('search')}
+            onClick={() => onNavigateTab('profile')}
             style={{ padding: 0, fontSize: 13 }}
           >
             Xem tất cả <RightOutlined style={{ fontSize: 10 }} />
@@ -162,26 +165,24 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
           <div style={{ textAlign: 'center', padding: '30px 0' }}>
             <Spin tip="Đang tải dữ liệu..." />
           </div>
-        ) : recentItems.length === 0 ? (
+        ) : lostReports.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Chưa có món đồ nào được gửi vào tủ gần đây."
+            description="Bạn chưa gửi đơn báo mất nào."
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {recentItems.map((item) => (
+            {lostReports.map((report) => (
               <div
-                key={item.id}
+                key={report.id}
                 className="card-clean"
                 style={{
                   margin: 0,
-                  cursor: 'pointer',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   transition: 'background 0.15s',
                 }}
-                onClick={() => onOpenItemDetail(item)}
               >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div
@@ -189,22 +190,23 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
                       width: 44,
                       height: 44,
                       borderRadius: 10,
-                      background: '#eff6ff',
-                      color: '#2563eb',
+                      background: '#fff7ed',
+                      color: '#f97316',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 20,
                     }}
                   >
-                    <InboxOutlined />
+                    <FileTextOutlined />
                   </div>
                   <div>
                     <Text strong style={{ fontSize: 14, display: 'block', color: '#0f172a' }}>
-                      {item.item_name}
+                      {report.item_name}
                     </Text>
                     <Text type="secondary" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <EnvironmentOutlined style={{ fontSize: 11 }} /> {item.found_location}
+                      <ClockCircleOutlined style={{ fontSize: 11 }} /> Gửi ngày{' '}
+                      {new Date(report.created_at).toLocaleDateString('vi-VN')}
                     </Text>
                   </div>
                 </div>
@@ -212,23 +214,14 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
                 <div style={{ textAlign: 'right' }}>
                   <Tag
                     color={
-                      item.status === 'in_locker' || item.status === 'stored'
-                        ? 'processing'
-                        : item.status === 'reported'
-                        ? 'warning'
-                        : 'default'
+                      report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : 'processing'
                     }
                     style={{ margin: 0, borderRadius: 6 }}
                   >
-                    {item.status === 'in_locker' || item.status === 'stored'
-                      ? 'Trong tủ'
-                      : item.status === 'reported'
-                      ? 'Chờ cất tủ'
-                      : 'Đã nhận lại'}
+                    {report.status === 'found' ? 'Đã tìm thấy' : report.status === 'closed' ? 'Đã đóng' : 'Đang tìm kiếm'}
                   </Tag>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                    <ClockCircleOutlined style={{ fontSize: 10 }} />{' '}
-                    {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                    {report.match_count || 0} ứng viên
                   </div>
                 </div>
               </div>
