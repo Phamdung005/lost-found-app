@@ -213,6 +213,9 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
                     <Text strong style={{ fontSize: 15, color: '#0f172a' }}>
                       {item.item_name}
                     </Text>
+                    <div style={{ fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
+                      Mã theo dõi: {item.tracking_code || 'Chưa có'}
+                    </div>
                     <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <EnvironmentOutlined style={{ fontSize: 11 }} /> {item.found_location}
                     </div>
