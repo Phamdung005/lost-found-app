@@ -112,6 +112,12 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
       found_item_id: foundItemId,
       error: error instanceof Error ? error.message : "Unknown matching error",
     });
+    await createNotification({
+      role: "admin",
+      title: "⚠️ AI đối chiếu báo mất thất bại",
+      message: `Không thể đối chiếu đơn #${reportId} với món đồ #${foundItemId}. Kiểm tra cấu hình Gemini hoặc log hệ thống.`,
+      type: "warning",
+    });
     return;
   }
 
@@ -165,5 +171,14 @@ export async function matchLostReportAgainstFoundItems(reportId: number): Promis
   );
   for (const item of items.rows) {
     await matchLostReportWithFoundItem(reportId, Number(item.id));
+  }
+}
+
+export async function scanOpenLostReports(): Promise<void> {
+  const reports = await pool.query(
+    "SELECT id FROM lost_reports WHERE status = 'searching' ORDER BY created_at ASC",
+  );
+  for (const report of reports.rows) {
+    await matchLostReportAgainstFoundItems(Number(report.id));
   }
 }

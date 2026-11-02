@@ -37,7 +37,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 }) => {
   const { user, isAuthenticated, logout, token } = useAuth();
   const [claims, setClaims] = useState<any[]>([]);
+  const [lostReports, setLostReports] = useState<any[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(false);
+  const [loadingLostReports, setLoadingLostReports] = useState(false);
   const [redeemingId, setRedeemingId] = useState<number | null>(null);
   const [inputOtp, setInputOtp] = useState('');
   const [submittingRedeem, setSubmittingRedeem] = useState(false);
@@ -61,11 +63,29 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     }
   };
 
+  const fetchMyLostReports = async (isSilent = false) => {
+    if (!token) return;
+    if (!isSilent) setLoadingLostReports(true);
+    try {
+      const res = await fetch(`${API_BASE}/lost-reports/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) setLostReports(data.data || []);
+    } catch (err) {
+      console.error('Không thể tải đơn báo mất:', err);
+    } finally {
+      if (!isSilent) setLoadingLostReports(false);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       void fetchMyClaims();
+      void fetchMyLostReports();
       const interval = setInterval(() => {
         void fetchMyClaims(true); // Tự động làm mới ngầm mỗi 3s khi Admin phê duyệt
+        void fetchMyLostReports(true);
       }, 3000);
       return () => clearInterval(interval);
     }
@@ -184,7 +204,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   }
 
   return (
-    <div>
+    <>
       {/* Profile Card */}
       <div
         className="card-clean"
@@ -255,6 +275,42 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         >
           Làm mới
         </Button>
+      </div>
+
+      {/* Lost reports */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 20 }}>
+          <Title level={5} style={{ margin: 0, fontWeight: 700 }}>Đơn báo mất của bạn</Title>
+          <span style={{ fontSize: 12, color: '#64748b' }}>{lostReports.length} đơn</span>
+        </div>
+        {loadingLostReports ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin /></div>
+        ) : lostReports.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Bạn chưa có đơn báo mất nào." />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {lostReports.map((report) => (
+              <div key={report.id} className="card-clean" style={{ margin: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <Text strong>{report.item_name}</Text>
+                  <Tag color={report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : 'processing'}>
+                    {report.status === 'found' ? 'Đã tìm thấy ứng viên' : report.status === 'closed' ? 'Đã đóng' : 'Đang theo dõi'}
+                  </Tag>
+                </div>
+                <div style={{ color: '#64748b', fontSize: 12, marginTop: 5 }}>
+                  Nơi mất: {report.lost_location} · Gửi ngày {new Date(report.created_at).toLocaleDateString('vi-VN')}
+                </div>
+                {report.description && <div style={{ fontSize: 12, marginTop: 6 }}>Đặc điểm: {report.description}</div>}
+                <div style={{ fontSize: 12, color: '#2563eb', marginTop: 6 }}>
+                  AI đã kiểm tra {report.match_count || 0} ứng viên
+                  {report.best_match_score !== null && report.best_match_score !== undefined
+                    ? ` · Điểm cao nhất ${Math.round(Number(report.best_match_score) * 100)}%`
+                    : ' · Đang chờ đối chiếu'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Claims List */}
@@ -429,6 +485,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 };

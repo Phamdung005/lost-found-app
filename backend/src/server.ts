@@ -15,7 +15,7 @@ import { authenticateToken, requireAdmin } from "./middleware/auth.js";
 import type { AuthenticatedRequest } from "./middleware/auth.js";
 import { createNotification } from "./utils/notifications.js";
 import { parseHardwareConfig } from "./utils/hardware-config.js";
-import { matchLostReportAgainstFoundItems } from "./services/lost-item-matching.js";
+import { matchLostReportAgainstFoundItems, scanOpenLostReports } from "./services/lost-item-matching.js";
 import { logAudit } from "./utils/audit.js";
 
 dotenv.config();
@@ -47,29 +47,30 @@ app.get("/api/db-check", async (_req, res) => {
       data: result.rows[0],
     });
 
-    app.get("/api/lost-reports/:id/matches", authenticateToken, requireAdmin, async (req, res) => {
-      try {
-        const result = await pool.query(
-          `SELECT lrm.*, fi.item_name, fi.category, fi.description, fi.found_location,
-                  fi.tracking_code, fi.status AS found_item_status
-           FROM lost_report_matches lrm
-           JOIN found_items fi ON fi.id = lrm.found_item_id
-           WHERE lrm.lost_report_id = $1
-           ORDER BY lrm.score DESC, lrm.created_at DESC`,
-          [Number(req.params.id)],
-        );
-        res.json({ success: true, data: result.rows });
-      } catch (error) {
-        console.error("Get lost report matches failed:", error);
-        res.status(500).json({ success: false, message: "Không thể lấy kết quả đối chiếu" });
-      }
-    });
   } catch (error) {
     console.error("Database connection failed:", error);
     res.status(500).json({
       success: false,
       message: "Cannot connect to PostgreSQL",
     });
+  }
+});
+
+app.get("/api/lost-reports/:id/matches", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT lrm.*, fi.item_name, fi.category, fi.description, fi.found_location,
+              fi.tracking_code, fi.status AS found_item_status
+       FROM lost_report_matches lrm
+       JOIN found_items fi ON fi.id = lrm.found_item_id
+       WHERE lrm.lost_report_id = $1
+       ORDER BY lrm.score DESC, lrm.created_at DESC`,
+      [Number(req.params.id)],
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Get lost report matches failed:", error);
+    res.status(500).json({ success: false, message: "Không thể lấy kết quả đối chiếu" });
   }
 });
 
@@ -398,6 +399,30 @@ app.get("/api/lost-reports", async (req, res) => {
       success: false,
       message: "Không thể lấy danh sách báo mất đồ",
     });
+
+  }
+});
+
+app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
+  try {
+    const userId = (req as AuthenticatedRequest).user?.id;
+    const result = await pool.query(
+      `SELECT lr.id, lr.item_name, lr.category, lr.description, lr.lost_location,
+              lr.lost_at, lr.reporter_contact, lr.status, lr.created_at,
+              COUNT(lrm.id)::int AS match_count,
+              MAX(lrm.score) AS best_match_score,
+              MAX(lrm.created_at) AS last_match_at
+       FROM lost_reports lr
+       LEFT JOIN lost_report_matches lrm ON lrm.lost_report_id = lr.id
+       WHERE lr.user_id = $1
+       GROUP BY lr.id
+       ORDER BY lr.created_at DESC`,
+      [userId],
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Get my lost reports failed:", error);
+    res.status(500).json({ success: false, message: "Không thể tải đơn báo mất của bạn" });
   }
 });
 
@@ -643,6 +668,13 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`Smart Locker API running at http://localhost:${PORT}`);
+    const scan = () => {
+      void scanOpenLostReports().catch((error) => {
+        console.error("Scheduled lost report matching failed:", error);
+      });
+    };
+    scan();
+    setInterval(scan, 60_000);
   });
 }
 
