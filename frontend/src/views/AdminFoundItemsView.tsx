@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Empty, Input, Select, Spin, Tag, Typography } from 'antd';
+import { Alert, Empty, Image, Input, Select, Spin, Tag, Typography } from 'antd';
 import { InboxOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { API_BASE } from '../config/api';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ interface FoundItem {
   slot_code?: string | null;
   locker_code?: string | null;
   finder_contact?: string | null;
+  image_url?: string | null;
 }
 
 export const AdminFoundItemsView: React.FC = () => {
@@ -98,6 +99,15 @@ export const AdminFoundItemsView: React.FC = () => {
             <div key={item.id} className="card-clean" style={{ margin: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <div>
+                  {item.image_url && (
+                    <Image
+                      src={item.image_url}
+                      width={72}
+                      height={72}
+                      preview
+                      style={{ borderRadius: 8, objectFit: 'cover', marginBottom: 6 }}
+                    />
+                  )}
                   <Text strong style={{ fontSize: 15 }}>{item.item_name}</Text>
                   <div style={{ color: '#64748b', fontSize: 12, marginTop: 3 }}>
                     {item.category} · Nhặt tại {item.found_location}

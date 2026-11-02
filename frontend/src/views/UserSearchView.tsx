@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Input, Tag, Empty, Spin, Button, Modal, Space } from 'antd';
+import { Typography, Input, Tag, Empty, Spin, Button, Modal, Space, Image } from 'antd';
 import {
   SearchOutlined,
   InboxOutlined,
@@ -194,6 +194,15 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  {item.image_url && (
+                    <Image
+                      src={item.image_url}
+                      width={40}
+                      height={40}
+                      preview
+                      style={{ borderRadius: 10, objectFit: 'cover' }}
+                    />
+                  )}
                   <div
                     style={{
                       width: 40,
@@ -292,6 +301,15 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
           width={420}
         >
           <div style={{ textAlign: 'center', padding: '10px 0 16px' }}>
+            {activeModalItem.image_url && (
+              <Image
+                src={activeModalItem.image_url}
+                width={220}
+                height={180}
+                preview
+                style={{ borderRadius: 12, objectFit: 'cover', marginBottom: 12 }}
+              />
+            )}
             <div
               style={{
                 width: 56,

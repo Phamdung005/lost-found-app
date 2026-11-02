@@ -18,6 +18,7 @@ import { createNotification } from "./utils/notifications.js";
 import { parseHardwareConfig } from "./utils/hardware-config.js";
 import { matchLostReportAgainstFoundItems, scanOpenLostReports } from "./services/lost-item-matching.js";
 import { logAudit } from "./utils/audit.js";
+import { createObjectReadUrls } from "./services/object-storage.js";
 
 dotenv.config();
 
@@ -77,14 +78,18 @@ app.get("/api/lost-reports/:id/matches", authenticateToken, async (req, res) => 
 
     const result = await pool.query(
       `SELECT lrm.*, fi.item_name, fi.category, fi.description, fi.found_location,
-              fi.tracking_code, fi.status AS found_item_status
+             fi.tracking_code, fi.status AS found_item_status, fi.image_object_keys
        FROM lost_report_matches lrm
        JOIN found_items fi ON fi.id = lrm.found_item_id
        WHERE lrm.lost_report_id = $1
        ORDER BY lrm.score DESC, lrm.created_at DESC`,
       [Number(req.params.id)],
     );
-    res.json({ success: true, data: result.rows });
+    const matches = await Promise.all(result.rows.map(async (match) => ({
+      ...match,
+      image_urls: await createObjectReadUrls(match.image_object_keys),
+    })));
+    res.json({ success: true, data: matches });
   } catch (error) {
     console.error("Get lost report matches failed:", error);
     res.status(500).json({ success: false, message: "Không thể lấy kết quả đối chiếu" });
@@ -388,6 +393,7 @@ app.get("/api/lost-reports", async (req, res) => {
     let query = `
       SELECT lr.id, lr.item_name, lr.category, lr.description, lr.lost_location,
              lr.lost_at, lr.reporter_contact, lr.status, lr.user_id, lr.created_at,
+             lr.image_object_keys,
              COUNT(lrm.id)::int AS match_count,
              MAX(lrm.score) AS best_match_score
       FROM lost_reports lr
@@ -409,7 +415,11 @@ app.get("/api/lost-reports", async (req, res) => {
     query += ` GROUP BY lr.id ORDER BY lr.created_at DESC`;
 
     const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows });
+    const reports = await Promise.all(result.rows.map(async (report) => ({
+      ...report,
+      image_urls: await createObjectReadUrls(report.image_object_keys),
+    })));
+    res.json({ success: true, data: reports });
   } catch (error) {
     console.error("Get lost reports failed:", error);
     res.status(500).json({
@@ -426,6 +436,7 @@ app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT lr.id, lr.item_name, lr.category, lr.description, lr.lost_location,
               lr.lost_at, lr.reporter_contact, lr.status, lr.created_at,
+              lr.image_object_keys,
               COUNT(lrm.id)::int AS match_count,
               MAX(lrm.score) AS best_match_score,
               MAX(lrm.created_at) AS last_match_at
@@ -436,7 +447,11 @@ app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
        ORDER BY lr.created_at DESC`,
       [userId],
     );
-    res.json({ success: true, data: result.rows });
+    const reports = await Promise.all(result.rows.map(async (report) => ({
+      ...report,
+      image_urls: await createObjectReadUrls(report.image_object_keys),
+    })));
+    res.json({ success: true, data: reports });
   } catch (error) {
     console.error("Get my lost reports failed:", error);
     res.status(500).json({ success: false, message: "Không thể tải đơn báo mất của bạn" });

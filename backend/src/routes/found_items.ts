@@ -7,6 +7,7 @@ import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
 import { matchFoundItemAgainstOpenReports } from "../services/lost-item-matching.js";
+import { createObjectReadUrls } from "../services/object-storage.js";
 
 const router = Router();
 
@@ -343,6 +344,7 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
         CASE WHEN f.status = 'stored' THEN 'in_locker' ELSE f.status END as status,
         f.tracking_code,
         f.image_url,
+        f.image_object_keys,
         f.slot_id,
         s.slot_code,
         l.locker_code,
@@ -380,16 +382,22 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     const result = await pool.query(query, params);
 
     // Xử lý dữ liệu trả về cho User: ẩn mã ngăn chi tiết A01/A02, chỉ hiển thị tên tủ tổng quan
-    const safeData = result.rows.map((row) => {
+    const safeData = await Promise.all(result.rows.map(async (row) => {
+      const imageUrls = await createObjectReadUrls(row.image_object_keys);
+      const itemWithImages = {
+        ...row,
+        image_urls: imageUrls,
+        image_url: imageUrls[0] || row.image_url || null,
+      };
       if (!isAdmin) {
         return {
-          ...row,
+          ...itemWithImages,
           slot_code: row.slot_code ? "Đang bảo quản trong tủ" : "Chưa gửi vào tủ",
           slot_id: undefined, // Ẩn ID ngăn chi tiết
         };
       }
-      return row;
-    });
+      return itemWithImages;
+    }));
 
     res.json({
       success: true,
@@ -439,6 +447,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         CASE WHEN f.status = 'stored' THEN 'in_locker' ELSE f.status END as status,
         f.tracking_code,
         f.image_url,
+        f.image_object_keys,
         f.slot_id,
         s.slot_code,
         l.locker_code,
@@ -457,6 +466,9 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     }
 
     const item = result.rows[0];
+    const imageUrls = await createObjectReadUrls(item.image_object_keys);
+    item.image_urls = imageUrls;
+    item.image_url = imageUrls[0] || item.image_url || null;
     if (!isAdmin) {
       item.slot_code = item.slot_code ? "Đang bảo quản trong tủ" : "Chưa gửi vào tủ";
       item.slot_id = undefined;

@@ -109,3 +109,9 @@ export async function createObjectReadUrl(key: string): Promise<string> {
     { expiresIn: config.presignedUrlTtlSeconds },
   );
 }
+
+export async function createObjectReadUrls(keys: unknown): Promise<string[]> {
+  if (!Array.isArray(keys)) return [];
+  const validKeys = keys.filter((key): key is string => typeof key === "string" && key.trim().length > 0);
+  return Promise.all(validKeys.map((key) => createObjectReadUrl(key)));
+}
