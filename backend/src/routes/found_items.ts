@@ -349,7 +349,11 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
 
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`);
-      query += ` AND (LOWER(f.item_name) LIKE $${params.length} OR LOWER(f.found_location) LIKE $${params.length})`;
+      query += ` AND (
+        LOWER(f.item_name) LIKE $${params.length}
+        OR LOWER(f.found_location) LIKE $${params.length}
+        OR LOWER(f.tracking_code) LIKE $${params.length}
+      )`;
     }
 
     if (category && typeof category === "string" && category !== "all") {

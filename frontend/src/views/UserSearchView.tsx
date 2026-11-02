@@ -71,10 +71,12 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
 
   // Filter items based on activeSearchTerm and status
   const filteredItems = items.filter((item) => {
+    const searchTerm = activeSearchTerm.toLowerCase();
     const matchesSearch =
       !activeSearchTerm ||
-      item.item_name.toLowerCase().includes(activeSearchTerm.toLowerCase()) ||
-      (item.found_location && item.found_location.toLowerCase().includes(activeSearchTerm.toLowerCase()));
+      item.item_name.toLowerCase().includes(searchTerm) ||
+      (item.found_location && item.found_location.toLowerCase().includes(searchTerm)) ||
+      (item.tracking_code && item.tracking_code.toLowerCase().includes(searchTerm));
 
     const matchesStatus =
       filterStatus === 'all' ||
@@ -328,6 +330,10 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
             <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: '#64748b' }}>Thời gian tiếp nhận:</span>
               <span>{new Date(activeModalItem.created_at).toLocaleString('vi-VN')}</span>
+            </div>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#64748b' }}>Mã theo dõi:</span>
+              <span style={{ fontWeight: 600 }}>{activeModalItem.tracking_code || 'Chưa có'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: '#64748b' }}>Hệ thống tủ:</span>
