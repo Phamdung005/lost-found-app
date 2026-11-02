@@ -84,6 +84,30 @@ router.post("/heartbeat", authenticateDevice, async (req: Request, res: Response
   }
 });
 
+// ESP32 tải cấu hình các ngăn có phần cứng khi khởi động
+router.get("/config", authenticateDevice, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const lockerId = (req as any).device.id;
+    const result = await pool.query(
+      `SELECT slot_code, hardware_enabled, servo_pin, sensor_pin
+       FROM locker_slots
+       WHERE locker_id = $1 AND hardware_enabled = true
+       ORDER BY slot_code`,
+      [lockerId]
+    );
+
+    res.json({
+      success: true,
+      locker_code: (req as any).device.locker_code,
+      slots: result.rows,
+      server_time: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Get device config error:", error);
+    res.status(500).json({ success: false, message: "Không thể tải cấu hình thiết bị" });
+  }
+});
+
 // 2. ESP32 Polling lấy lệnh tiếp theo (Pending)
 router.get("/commands/next", authenticateDevice, async (req: Request, res: Response): Promise<void> => {
   const client = await pool.connect();
@@ -94,7 +118,8 @@ router.get("/commands/next", authenticateDevice, async (req: Request, res: Respo
 
     // Tìm lệnh pending chưa hết hạn, sắp xếp theo thời gian cũ nhất trước
     const cmdResult = await client.query(
-      `SELECT c.id, c.command_type, c.parameters, c.slot_id, s.slot_code
+      `SELECT c.id, c.command_type, c.parameters, c.slot_id, s.slot_code,
+              s.hardware_enabled, s.servo_pin, s.sensor_pin
        FROM locker_commands c
        LEFT JOIN locker_slots s ON c.slot_id = s.id
        WHERE c.locker_id = $1 
@@ -125,9 +150,6 @@ router.get("/commands/next", authenticateDevice, async (req: Request, res: Respo
 
     await client.query("COMMIT");
 
-    // Xác định GPIO dựa vào slot_code (A01 -> GPIO 18, A02 -> GPIO 19)
-    const gpioPin = command.slot_code === "A01" ? 18 : command.slot_code === "A02" ? 19 : 18;
-
     res.json({
       success: true,
       has_command: true,
@@ -135,7 +157,9 @@ router.get("/commands/next", authenticateDevice, async (req: Request, res: Respo
         id: command.id,
         command_type: command.command_type,
         slot_code: command.slot_code,
-        gpio: gpioPin,
+        hardware_enabled: command.hardware_enabled,
+        servo_pin: command.servo_pin,
+        sensor_pin: command.sensor_pin,
         parameters: command.parameters || {},
       },
     });
@@ -258,6 +282,7 @@ router.get("/status", async (_req: Request, res: Response): Promise<void> => {
         COALESCE(occupancy_status, status, 'empty') as occupancy_status,
         COALESCE(door_status, 'closed') as door_status,
         COALESCE(device_status, 'online') as device_status,
+        hardware_enabled, servo_pin, sensor_pin,
         updated_at
       FROM locker_slots
       WHERE locker_id = $1
@@ -276,8 +301,14 @@ router.get("/status", async (_req: Request, res: Response): Promise<void> => {
         slots: slotsRes.rows,
         hardware_info: {
           microcontroller: "ESP32",
-          slot_a01: { gpio: 18, type: "Servo SG90 + Door Sensor" },
-          slot_a02: { gpio: 19, type: "Servo SG90 + Door Sensor" },
+          slots: slotsRes.rows
+            .filter((slot) => slot.hardware_enabled)
+            .map((slot) => ({
+              slot_code: slot.slot_code,
+              servo_pin: slot.servo_pin,
+              sensor_pin: slot.sensor_pin,
+              type: "Servo SG90 + Door Sensor",
+            })),
         },
       },
     });
@@ -293,14 +324,15 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
     const adminId = req.user?.id;
     const { slot_code, command_type, duration_ms, release_item } = req.body;
 
-    if (!slot_code || !["A01", "A02"].includes(slot_code)) {
-      res.status(400).json({ success: false, message: "Mã ngăn phải là A01 hoặc A02" });
+    if (!slot_code || typeof slot_code !== "string") {
+      res.status(400).json({ success: false, message: "Mã ngăn không hợp lệ" });
       return;
     }
 
     // Lấy thông tin tủ L-001 và slot
     const slotRes = await pool.query(`
       SELECT s.id, s.locker_id, l.locker_code, l.is_simulation_mode,
+             s.hardware_enabled, s.servo_pin, s.sensor_pin,
              CASE WHEN l.last_heartbeat > (now() - INTERVAL '35 seconds') THEN true ELSE false END as is_online
       FROM locker_slots s
       JOIN lockers l ON s.locker_id = l.id
@@ -314,6 +346,11 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
 
     const slot = slotRes.rows[0];
 
+    if (!slot.hardware_enabled || slot.servo_pin === null || slot.sensor_pin === null) {
+      res.status(400).json({ success: false, message: `Ngăn ${slot_code} chưa được cấu hình phần cứng` });
+      return;
+    }
+
     // Tạo lệnh trong hàng đợi
     const cmdRes = await pool.query(`
       INSERT INTO locker_commands 
@@ -326,7 +363,8 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
       command_type || "OPEN_SLOT",
       JSON.stringify({ 
         duration_ms: duration_ms || 5000, 
-        gpio: slot_code === "A01" ? 18 : 19,
+        servo_pin: slot.servo_pin,
+        sensor_pin: slot.sensor_pin,
         release_item: !!release_item
       }),
       adminId,
@@ -455,9 +493,11 @@ router.post("/simulate-execute/:id", authenticateToken, requireAdmin, async (req
     await client.query("BEGIN");
 
     const cmdCheck = await client.query(
-      `SELECT c.id, c.slot_id, s.slot_code, c.command_type
+      `SELECT c.id, c.slot_id, s.slot_code, c.command_type, c.status,
+              c.is_simulation, l.is_simulation_mode
        FROM locker_commands c
        LEFT JOIN locker_slots s ON c.slot_id = s.id
+       JOIN lockers l ON l.id = c.locker_id
        WHERE c.id = $1
        FOR UPDATE OF c`,
       [commandId]
@@ -470,6 +510,17 @@ router.post("/simulate-execute/:id", authenticateToken, requireAdmin, async (req
     }
 
     const command = cmdCheck.rows[0];
+
+    if (!command.is_simulation && !command.is_simulation_mode) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ success: false, message: "Chỉ được mô phỏng khi tủ đang bật Simulation Mode" });
+      return;
+    }
+    if (command.status !== "pending" && command.status !== "executing") {
+      await client.query("ROLLBACK");
+      res.status(400).json({ success: false, message: `Lệnh đang ở trạng thái ${command.status}, không thể mô phỏng` });
+      return;
+    }
 
     // Cập nhật trạng thái lệnh thành công (mô phỏng)
     await client.query(`
