@@ -1,39 +1,73 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  CreateBucketCommand,
+  GetObjectCommand,
+  ListBucketsCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 interface ObjectStorageConfig {
-  url: string;
-  serviceRoleKey: string;
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
   bucket: string;
   signedUrlTtlSeconds: number;
 }
 
 function getObjectStorageConfig(): ObjectStorageConfig {
-  const url = process.env.SUPABASE_URL?.trim();
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim();
+  const endpoint = process.env.AWS_ENDPOINT_URL_S3?.trim();
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  const region = process.env.AWS_REGION?.trim() || "us-east-2";
+  const bucket = process.env.NEON_STORAGE_BUCKET?.trim();
 
-  if (!url || !serviceRoleKey || !bucket) {
+  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
     throw new Error(
-      "Chưa cấu hình Supabase Storage: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET",
+      "Chưa cấu hình Neon Object Storage: AWS_ENDPOINT_URL_S3, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, NEON_STORAGE_BUCKET",
     );
   }
 
-  const ttl = Number(process.env.SUPABASE_SIGNED_URL_TTL_SECONDS || "900");
-  if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) {
-    throw new Error("SUPABASE_SIGNED_URL_TTL_SECONDS phải nằm trong khoảng 60-86400");
+  let endpointUrl: URL;
+  try {
+    endpointUrl = new URL(endpoint);
+  } catch {
+    throw new Error("AWS_ENDPOINT_URL_S3 phải là một URL hợp lệ");
+  }
+  if (endpointUrl.protocol !== "https:" && endpointUrl.protocol !== "http:") {
+    throw new Error("AWS_ENDPOINT_URL_S3 phải dùng HTTP hoặc HTTPS");
   }
 
-  return { url, serviceRoleKey, bucket, signedUrlTtlSeconds: ttl };
+  const ttl = Number(process.env.NEON_SIGNED_URL_TTL_SECONDS || "900");
+  if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) {
+    throw new Error("NEON_SIGNED_URL_TTL_SECONDS phải nằm trong khoảng 60-86400");
+  }
+
+  return {
+    endpoint: endpointUrl.toString().replace(/\/$/, ""),
+    accessKeyId,
+    secretAccessKey,
+    region,
+    bucket,
+    signedUrlTtlSeconds: ttl,
+  };
 }
 
-let client: SupabaseClient | null = null;
+let client: S3Client | null = null;
 let config: ObjectStorageConfig | null = null;
 
-function getClient(): { client: SupabaseClient; config: ObjectStorageConfig } {
+function getClient(): { client: S3Client; config: ObjectStorageConfig } {
   if (!client || !config) {
     config = getObjectStorageConfig();
-    client = createClient(config.url, config.serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
+    client = new S3Client({
+      endpoint: config.endpoint,
+      region: config.region,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
     });
   }
   return { client, config };
@@ -41,18 +75,10 @@ function getClient(): { client: SupabaseClient; config: ObjectStorageConfig } {
 
 export async function ensureObjectStorageBucket(): Promise<void> {
   const { client, config } = getClient();
-  const { data: buckets, error: listError } = await client.storage.listBuckets();
-  if (listError) throw new Error(`Không thể kiểm tra Supabase Storage: ${listError.message}`);
-  if (buckets.some((bucket) => bucket.name === config.bucket)) return;
+  const { Buckets } = await client.send(new ListBucketsCommand({}));
+  if (Buckets?.some((bucket) => bucket.Name === config.bucket)) return;
 
-  const { error } = await client.storage.createBucket(config.bucket, {
-    public: false,
-    fileSizeLimit: "5242880",
-    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
-  });
-  if (error && !/already exists/i.test(error.message)) {
-    throw new Error(`Không thể tạo bucket Supabase: ${error.message}`);
-  }
+  await client.send(new CreateBucketCommand({ Bucket: config.bucket }));
 }
 
 export async function uploadObject(
@@ -64,24 +90,25 @@ export async function uploadObject(
   if (!key.trim()) throw new Error("Object key không được để trống");
   if (!contentType.trim()) throw new Error("Content-Type không được để trống");
 
-  const { error } = await client.storage.from(config.bucket).upload(key, body, {
-    contentType,
-    upsert: false,
-  });
-  if (error) throw new Error(`Không thể upload ảnh lên Supabase: ${error.message}`);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
 }
 
 export async function createObjectReadUrl(key: string): Promise<string> {
   const { client, config } = getClient();
   if (!key.trim()) throw new Error("Object key không được để trống");
 
-  const { data, error } = await client.storage
-    .from(config.bucket)
-    .createSignedUrl(key, config.signedUrlTtlSeconds);
-  if (error || !data?.signedUrl) {
-    throw new Error(`Không thể tạo URL ảnh Supabase: ${error?.message || "URL rỗng"}`);
-  }
-  return data.signedUrl;
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+    { expiresIn: config.signedUrlTtlSeconds },
+  );
 }
 
 export async function createObjectReadUrls(keys: unknown): Promise<string[]> {
@@ -96,13 +123,13 @@ export async function readObject(
   const { client, config } = getClient();
   if (!key.trim()) throw new Error("Object key không được để trống");
 
-  const { data, error } = await client.storage.from(config.bucket).download(key);
-  if (error || !data) {
-    throw new Error(`Không thể đọc ảnh Supabase: ${error?.message || "dữ liệu rỗng"}`);
-  }
+  const output = await client.send(
+    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+  );
+  if (!output.Body) throw new Error("Không thể đọc ảnh Neon Object Storage: dữ liệu rỗng");
 
   return {
-    bytes: new Uint8Array(await data.arrayBuffer()),
-    contentType: data.type || "image/jpeg",
+    bytes: await output.Body.transformToByteArray(),
+    contentType: output.ContentType || "image/jpeg",
   };
 }
