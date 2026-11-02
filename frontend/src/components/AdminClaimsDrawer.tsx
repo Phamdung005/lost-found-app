@@ -45,12 +45,12 @@ export const AdminClaimsDrawer: React.FC<AdminClaimsDrawerProps> = ({
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/claims`, {
+      const res = await fetch(`${API_BASE}/claims?status=pending`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (data.success) {
-        setClaims(data.data || []);
+        setClaims((data.data || []).filter((claim: { status?: string }) => claim.status === 'pending'));
       }
     } catch (err) {
       console.error(err);
