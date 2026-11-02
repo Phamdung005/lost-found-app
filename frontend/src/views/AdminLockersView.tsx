@@ -7,6 +7,8 @@ import {
   Popconfirm,
   Modal,
   Input,
+  InputNumber,
+  Switch,
   Space,
 } from 'antd';
 import {
@@ -17,6 +19,7 @@ import {
   PlusOutlined,
   DeleteOutlined,
   ToolOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config/api';
@@ -34,7 +37,15 @@ export const AdminLockersView: React.FC = () => {
   // Modal thêm ngăn tủ
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [newSlotCode, setNewSlotCode] = useState('');
+  const [newHardwareEnabled, setNewHardwareEnabled] = useState(false);
+  const [newServoPin, setNewServoPin] = useState<number | null>(null);
+  const [newSensorPin, setNewSensorPin] = useState<number | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
+  const [configSlot, setConfigSlot] = useState<any | null>(null);
+  const [configHardwareEnabled, setConfigHardwareEnabled] = useState(false);
+  const [configServoPin, setConfigServoPin] = useState<number | null>(null);
+  const [configSensorPin, setConfigSensorPin] = useState<number | null>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const fetchLockerData = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -78,7 +89,17 @@ export const AdminLockersView: React.FC = () => {
   const handleOpenAddModal = () => {
     const nextNum = (slots.length + 1).toString().padStart(2, '0');
     setNewSlotCode(`A${nextNum}`);
+    setNewHardwareEnabled(false);
+    setNewServoPin(null);
+    setNewSensorPin(null);
     setAddModalOpen(true);
+  };
+
+  const handleOpenConfigModal = (slot: any) => {
+    setConfigSlot(slot);
+    setConfigHardwareEnabled(Boolean(slot.hardware_enabled));
+    setConfigServoPin(slot.servo_pin ?? null);
+    setConfigSensorPin(slot.sensor_pin ?? null);
   };
 
   // 1. Thêm ngăn tủ
@@ -95,7 +116,12 @@ export const AdminLockersView: React.FC = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ slot_code: newSlotCode.trim() }),
+        body: JSON.stringify({
+          slot_code: newSlotCode.trim(),
+          hardware_enabled: newHardwareEnabled,
+          servo_pin: newHardwareEnabled ? newServoPin : null,
+          sensor_pin: newHardwareEnabled ? newSensorPin : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -108,6 +134,36 @@ export const AdminLockersView: React.FC = () => {
       message.error(err.message || 'Không thể tạo ngăn tủ');
     } finally {
       setAddingSlot(false);
+    }
+  };
+
+  const handleSaveHardwareConfig = async () => {
+    if (!configSlot) return;
+    setSavingConfig(true);
+    try {
+      const res = await fetch(`${API_BASE}/lockers/slots/${configSlot.id}/config`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `******`,
+        },
+        body: JSON.stringify({
+          hardware_enabled: configHardwareEnabled,
+          servo_pin: configHardwareEnabled ? configServoPin : null,
+          sensor_pin: configHardwareEnabled ? configSensorPin : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Không thể cập nhật cấu hình phần cứng');
+      }
+      message.success(data.message);
+      setConfigSlot(null);
+      await fetchLockerData();
+    } catch (err: any) {
+      message.error(err.message || 'Không thể cập nhật cấu hình phần cứng');
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -301,6 +357,16 @@ export const AdminLockersView: React.FC = () => {
                   >
                     {isMaintenance ? 'Bỏ bảo trì' : 'Bảo trì'}
                   </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<SettingOutlined />}
+                    onClick={() => handleOpenConfigModal(slot)}
+                    disabled={isOccupied}
+                    style={{ fontSize: 12, color: '#2563eb' }}
+                  >
+                    Phần cứng
+                  </Button>
 
                   <Popconfirm
                     title={`Xác nhận xóa ngăn ${slotCode}?`}
@@ -340,6 +406,14 @@ export const AdminLockersView: React.FC = () => {
                     {isMaintenance ? 'Đang bảo trì' : isOccupied ? 'Có đồ thất lạc' : 'Trống (Sẵn sàng)'}
                   </span>
                 </div>
+                <div className="slot-meta-item">
+                  <span className="slot-meta-label">Phần cứng:</span>
+                  <span className="slot-meta-val">
+                    {slot.hardware_enabled
+                      ? `Servo GPIO ${slot.servo_pin}, cảm biến GPIO ${slot.sensor_pin}`
+                      : 'Chưa cấu hình'}
+                  </span>
+                </div>
 
                 <div className="slot-meta-item">
                   <span className="slot-meta-label">Cảm biến cửa:</span>
@@ -353,7 +427,11 @@ export const AdminLockersView: React.FC = () => {
               </div>
 
               {/* Nút Mở khóa Servo */}
-              {isOccupied ? (
+              {!slot.hardware_enabled ? (
+                <Tag color="warning" style={{ width: '100%', textAlign: 'center', padding: 8 }}>
+                  Ngăn phần mềm — chưa có phần cứng điều khiển
+                </Tag>
+              ) : isOccupied ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <Popconfirm
                     title={`Mở ngăn ${slotCode} & Lấy đồ ra?`}
@@ -470,6 +548,75 @@ export const AdminLockersView: React.FC = () => {
             style={{ borderRadius: 8 }}
           />
         </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <label style={{ fontWeight: 600, fontSize: 13 }}>Ngăn có phần cứng</label>
+          <Switch checked={newHardwareEnabled} onChange={setNewHardwareEnabled} />
+        </div>
+        {newHardwareEnabled && (
+          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+            <label style={{ fontSize: 13 }}>
+              GPIO servo
+              <InputNumber
+                min={0}
+                max={39}
+                value={newServoPin}
+                onChange={(value) => setNewServoPin(value)}
+                style={{ width: '100%', marginTop: 6 }}
+                placeholder="Ví dụ: 23"
+              />
+            </label>
+            <label style={{ fontSize: 13 }}>
+              GPIO cảm biến cửa
+              <InputNumber
+                min={0}
+                max={39}
+                value={newSensorPin}
+                onChange={(value) => setNewSensorPin(value)}
+                style={{ width: '100%', marginTop: 6 }}
+                placeholder="Ví dụ: 16"
+              />
+            </label>
+          </Space>
+        )}
+      </Modal>
+
+      <Modal
+        title={`Cấu hình phần cứng ngăn ${configSlot?.slot_code || ''}`}
+        open={Boolean(configSlot)}
+        onCancel={() => setConfigSlot(null)}
+        onOk={() => void handleSaveHardwareConfig()}
+        confirmLoading={savingConfig}
+        okText="Lưu cấu hình"
+        cancelText="Hủy"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Text strong>Có phần cứng điều khiển</Text>
+          <Switch checked={configHardwareEnabled} onChange={setConfigHardwareEnabled} />
+        </div>
+        {configHardwareEnabled && (
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <label>
+              GPIO servo
+              <InputNumber
+                min={0}
+                max={39}
+                value={configServoPin}
+                onChange={(value) => setConfigServoPin(value)}
+                style={{ width: '100%', marginTop: 6 }}
+              />
+            </label>
+            <label>
+              GPIO cảm biến cửa
+              <InputNumber
+                min={0}
+                max={39}
+                value={configSensorPin}
+                onChange={(value) => setConfigSensorPin(value)}
+                style={{ width: '100%', marginTop: 6 }}
+              />
+            </label>
+          </Space>
+        )}
       </Modal>
 
       {/* Recent Commands History */}
