@@ -295,16 +295,28 @@ export const AdminReportsView: React.FC = () => {
                       <Text type="secondary" style={{ fontSize: 12 }}>Bằng chứng cung cấp: </Text>
                       <span style={{ fontWeight: 600, color: '#1e40af' }}>{claim.proof_description}</span>
                     </div>
-                    {claim.proof_image_urls?.length > 0 && (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                        {claim.proof_image_urls.map((url: string) => (
-                          <img
-                            key={url}
-                            src={url}
-                            alt="Ảnh bằng chứng của người yêu cầu"
-                            style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }}
-                          />
-                        ))}
+                    {(claim.item_image_urls?.length > 0 || claim.proof_image_urls?.length > 0) && (
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ color: '#475569', fontSize: 12, marginBottom: 5 }}>Ảnh món đồ lưu trữ</div>
+                          <Image.PreviewGroup>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {(claim.item_image_urls || []).map((url: string) => (
+                                <Image key={url} src={url} alt="Ảnh món đồ lưu trữ" width={96} height={96} style={{ objectFit: 'cover', borderRadius: 8 }} />
+                              ))}
+                            </div>
+                          </Image.PreviewGroup>
+                        </div>
+                        <div>
+                          <div style={{ color: '#475569', fontSize: 12, marginBottom: 5 }}>Ảnh bằng chứng người yêu cầu</div>
+                          <Image.PreviewGroup>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {claim.proof_image_urls.map((url: string) => (
+                                <Image key={url} src={url} alt="Ảnh bằng chứng của người yêu cầu" width={96} height={96} style={{ objectFit: 'cover', borderRadius: 8 }} />
+                              ))}
+                            </div>
+                          </Image.PreviewGroup>
+                        </div>
                       </div>
                     )}
                     <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, marginBottom: 8 }}>

@@ -202,6 +202,7 @@ router.get("/", authenticateToken, requireAdmin, async (req: AuthenticatedReques
         f.tracking_code,
         f.description as item_secret_description,
         f.image_url,
+        f.image_object_keys,
         lr.description as lost_report_description,
         lr.lost_location as reported_lost_location,
         s.slot_code,
@@ -232,7 +233,9 @@ router.get("/", authenticateToken, requireAdmin, async (req: AuthenticatedReques
     const claims = await Promise.all(result.rows.map(async (claim) => ({
       ...claim,
       proof_image_urls: await createObjectReadUrls(claim.proof_image_object_keys),
+      item_image_urls: await createObjectReadUrls(claim.image_object_keys),
       proof_image_object_keys: undefined,
+      image_object_keys: undefined,
     })));
 
     res.json({
@@ -273,6 +276,7 @@ router.get("/pending", authenticateToken, requireAdmin, async (_req: Authenticat
          f.tracking_code,
          f.description as item_secret_description,
          f.image_url,
+         f.image_object_keys,
          lr.description as lost_report_description,
          lr.lost_location as reported_lost_location,
          s.slot_code,
@@ -297,7 +301,9 @@ router.get("/pending", authenticateToken, requireAdmin, async (_req: Authenticat
     const claims = await Promise.all(result.rows.map(async (claim) => ({
       ...claim,
       proof_image_urls: await createObjectReadUrls(claim.proof_image_object_keys),
+      item_image_urls: await createObjectReadUrls(claim.image_object_keys),
       proof_image_object_keys: undefined,
+      image_object_keys: undefined,
     })));
 
     res.json({
