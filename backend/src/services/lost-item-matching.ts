@@ -139,26 +139,38 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
   };
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{
-        parts: [textPart, ...imageParts],
-      }],
-      generationConfig: { responseMimeType: "application/json" },
-    }),
+  const requestBody = JSON.stringify({
+    contents: [{
+      parts: [textPart, ...imageParts],
+    }],
+    generationConfig: { responseMimeType: "application/json" },
   });
-  const payload = await response.json().catch(() => null) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    error?: { message?: string };
-  } | null;
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || `Gemini request failed (${response.status})`);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: requestBody,
+    });
+    const payload = await response.json().catch(() => null) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      error?: { message?: string };
+    } | null;
+    if (response.ok) {
+      const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("Gemini không trả về kết quả đối chiếu");
+      return parseGeminiResult(text);
+    }
+
+    const message = payload?.error?.message || `Gemini request failed (${response.status})`;
+    const retryable = response.status === 429 || response.status === 500
+      || response.status === 503 || response.status === 504;
+    if (!retryable || attempt === 2) {
+      throw new Error(message);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
   }
-  const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini không trả về kết quả đối chiếu");
-  return parseGeminiResult(text);
+  throw new Error("Gemini matching retry limit reached");
 }
 
 export async function matchLostReportWithFoundItem(reportId: number, foundItemId: number): Promise<void> {
