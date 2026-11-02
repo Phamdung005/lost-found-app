@@ -269,6 +269,14 @@ export const AdminReportsView: React.FC = () => {
                       <Text type="secondary" style={{ fontSize: 12 }}>Bằng chứng cung cấp: </Text>
                       <span style={{ fontWeight: 600, color: '#1e40af' }}>{claim.proof_description}</span>
                     </div>
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, marginBottom: 8 }}>
+                      <div style={{ color: '#475569', fontSize: 12, marginBottom: 3 }}>
+                        Mô tả bí mật do người nhặt cung cấp:
+                      </div>
+                      <div style={{ fontWeight: 600, color: '#92400e' }}>
+                        {claim.item_secret_description || 'Chưa có mô tả bí mật cho món đồ này.'}
+                      </div>
+                    </div>
                     <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
                       <div style={{ color: '#475569', fontSize: 12, marginBottom: 3 }}>
                         Mô tả trong báo mất của người yêu cầu:
