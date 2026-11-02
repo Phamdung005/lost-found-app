@@ -518,7 +518,7 @@ app.post("/api/lost-reports", async (req, res) => {
         reporter_contact || null,
         userId,
         Array.isArray(image_object_keys) && image_object_keys.length > 0 ? image_object_keys[0] : null,
-        Array.isArray(image_object_keys) ? image_object_keys.slice(0, 3) : [],
+        JSON.stringify(Array.isArray(image_object_keys) ? image_object_keys.slice(0, 3) : []),
       ]
     );
 
