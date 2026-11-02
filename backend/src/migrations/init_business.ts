@@ -171,6 +171,10 @@ export async function runBusinessMigration() {
         lost_report_id INT NOT NULL REFERENCES lost_reports(id) ON DELETE CASCADE,
         found_item_id INT NOT NULL REFERENCES found_items(id) ON DELETE CASCADE,
         score NUMERIC(5, 4) NOT NULL CHECK (score >= 0 AND score <= 1),
+        identifier_score NUMERIC(5, 4) CHECK (identifier_score >= 0 AND identifier_score <= 1),
+        text_score NUMERIC(5, 4) CHECK (text_score >= 0 AND text_score <= 1),
+        image_score NUMERIC(5, 4) CHECK (image_score >= 0 AND image_score <= 1),
+        context_score NUMERIC(5, 4) CHECK (context_score >= 0 AND context_score <= 1),
         rationale TEXT NOT NULL,
         provider VARCHAR(50) NOT NULL,
         model VARCHAR(100) NOT NULL,
@@ -180,6 +184,13 @@ export async function runBusinessMigration() {
       );
       CREATE INDEX IF NOT EXISTS idx_lost_report_matches_report
         ON lost_report_matches(lost_report_id, score DESC);
+    `);
+    await client.query(`
+      ALTER TABLE lost_report_matches
+      ADD COLUMN IF NOT EXISTS identifier_score NUMERIC(5, 4),
+      ADD COLUMN IF NOT EXISTS text_score NUMERIC(5, 4),
+      ADD COLUMN IF NOT EXISTS image_score NUMERIC(5, 4),
+      ADD COLUMN IF NOT EXISTS context_score NUMERIC(5, 4);
     `);
     await client.query(`
       UPDATE lost_reports

@@ -9,7 +9,9 @@ import {
   message,
   Spin,
   Empty,
-  Popconfirm
+  Popconfirm,
+  Descriptions,
+  Image,
 } from 'antd';
 import {
   SafetyCertificateOutlined,
@@ -35,6 +37,10 @@ export const AdminReportsView: React.FC = () => {
   const [rejectingClaimId, setRejectingClaimId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [processingAction, setProcessingAction] = useState(false);
+  const [matchModalOpen, setMatchModalOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [reportMatches, setReportMatches] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
 
   const fetchClaims = async () => {
     if (!token) return;
@@ -178,6 +184,26 @@ export const AdminReportsView: React.FC = () => {
       }
     } catch (err) {
       message.error('Lỗi kết nối khi xóa');
+    }
+  };
+
+  const handleViewMatches = async (report: any) => {
+    if (!token) return;
+    setSelectedReport(report);
+    setReportMatches([]);
+    setMatchModalOpen(true);
+    setLoadingMatches(true);
+    try {
+      const res = await fetch(`${API_BASE}/lost-reports/${report.id}/matches`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Không thể tải kết quả AI');
+      setReportMatches(data.data || []);
+    } catch (error: any) {
+      message.error(error.message || 'Không thể tải kết quả AI');
+    } finally {
+      setLoadingMatches(false);
     }
   };
 
@@ -386,6 +412,13 @@ export const AdminReportsView: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                    <Button
+                      size="small"
+                      onClick={() => void handleViewMatches(report)}
+                      style={{ borderRadius: 6 }}
+                    >
+                      Xem phân tích AI
+                    </Button>
                     {report.status !== 'found' && (
                       <Button
                         size="small"
@@ -428,6 +461,57 @@ export const AdminReportsView: React.FC = () => {
           )}
         </div>
       )}
+
+      <Modal
+        open={matchModalOpen}
+        title={`Phân tích AI: ${selectedReport?.item_name || ''}`}
+        onCancel={() => setMatchModalOpen(false)}
+        footer={null}
+        width={620}
+      >
+        {loadingMatches ? (
+          <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+        ) : reportMatches.length === 0 ? (
+          <Empty description="Chưa có ứng viên được lưu." />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {reportMatches.map((match) => (
+              <div key={match.id} className="card-clean" style={{ margin: 0 }}>
+                {match.image_url && (
+                  <Image
+                    src={match.image_url}
+                    width={110}
+                    height={90}
+                    preview
+                    style={{ borderRadius: 8, objectFit: 'cover', marginBottom: 8 }}
+                  />
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text strong>{match.item_name}</Text>
+                  <Tag color={Number(match.score) >= 0.78 ? 'success' : 'default'}>
+                    Tổng {Math.round(Number(match.score) * 100)}%
+                  </Tag>
+                </div>
+                <Descriptions
+                  size="small"
+                  column={2}
+                  items={[
+                    { key: 'identifier', label: 'Mã định danh', children: `${Math.round(Number(match.identifier_score || 0) * 100)}%` },
+                    { key: 'text', label: 'Mô tả', children: `${Math.round(Number(match.text_score || 0) * 100)}%` },
+                    { key: 'image', label: 'Hình ảnh', children: `${Math.round(Number(match.image_score || 0) * 100)}%` },
+                    { key: 'context', label: 'Địa điểm/thời gian', children: `${Math.round(Number(match.context_score || 0) * 100)}%` },
+                    { key: 'tracking', label: 'Mã theo dõi', children: match.tracking_code || 'N/A' },
+                    { key: 'provider', label: 'Nguồn', children: match.provider || 'N/A' },
+                  ]}
+                />
+                <div style={{ marginTop: 10, fontSize: 13, color: '#475569' }}>
+                  <strong>Lý do:</strong> {match.rationale}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* Reject Modal */}
       <Modal

@@ -85,10 +85,14 @@ app.get("/api/lost-reports/:id/matches", authenticateToken, async (req, res) => 
        ORDER BY lrm.score DESC, lrm.created_at DESC`,
       [Number(req.params.id)],
     );
-    const matches = await Promise.all(result.rows.map(async (match) => ({
-      ...match,
-      image_urls: await createObjectReadUrls(match.image_object_keys),
-    })));
+    const matches = await Promise.all(result.rows.map(async (match) => {
+      const imageUrls = await createObjectReadUrls(match.image_object_keys);
+      return {
+        ...match,
+        image_urls: imageUrls,
+        image_url: imageUrls[0] || null,
+      };
+    }));
     res.json({ success: true, data: matches });
   } catch (error) {
     console.error("Get lost report matches failed:", error);

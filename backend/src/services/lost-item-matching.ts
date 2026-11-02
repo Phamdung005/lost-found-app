@@ -6,6 +6,25 @@ import { readObject } from "./object-storage.js";
 interface GeminiMatchResult {
   score: number;
   rationale: string;
+  identifierScore: number;
+  textScore: number;
+  imageScore: number;
+  contextScore: number;
+}
+
+function boundedScore(value: unknown): number {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(1, score));
+}
+
+function calculateWeightedScore(result: GeminiMatchResult): number {
+  return Number((
+    result.identifierScore * 0.5
+    + result.imageScore * 0.25
+    + result.textScore * 0.15
+    + result.contextScore * 0.1
+  ).toFixed(4));
 }
 
 function normalizeText(value: unknown): string {
@@ -30,6 +49,10 @@ export function findExactMatch(report: Record<string, unknown>, item: Record<str
     return {
       score: 1,
       rationale: `Khớp chính xác mã định danh ${sharedIdentifier} giữa đơn báo mất và mô tả vật lưu trữ.`,
+      identifierScore: 1,
+      textScore: 1,
+      imageScore: 0,
+      contextScore: 0,
     };
   }
   return null;
@@ -49,13 +72,28 @@ function parseGeminiResult(text: string): GeminiMatchResult {
   const parsed: unknown = JSON.parse(jsonText);
   if (!parsed || typeof parsed !== "object") throw new Error("Gemini trả về dữ liệu không hợp lệ");
 
-  const candidate = parsed as { score?: unknown; rationale?: unknown };
-  const score = Number(candidate.score);
+  const candidate = parsed as {
+    score?: unknown;
+    rationale?: unknown;
+    identifier_score?: unknown;
+    text_score?: unknown;
+    image_score?: unknown;
+    context_score?: unknown;
+  };
   const rationale = typeof candidate.rationale === "string" ? candidate.rationale.trim() : "";
-  if (!Number.isFinite(score) || score < 0 || score > 1 || !rationale) {
-    throw new Error("Gemini trả về score/rationale không hợp lệ");
+  if (!rationale) {
+    throw new Error("Gemini trả về rationale không hợp lệ");
   }
-  return { score, rationale };
+  const result = {
+    score: boundedScore(candidate.score),
+    rationale,
+    identifierScore: boundedScore(candidate.identifier_score),
+    textScore: boundedScore(candidate.text_score),
+    imageScore: boundedScore(candidate.image_score),
+    contextScore: boundedScore(candidate.context_score),
+  };
+  result.score = calculateWeightedScore(result);
+  return result;
 }
 
 async function askGemini(report: Record<string, unknown>, item: Record<string, unknown>): Promise<GeminiMatchResult> {
@@ -85,7 +123,7 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
   const textPart = {
     text: [
       "Bạn là bộ phận gợi ý đối chiếu đồ thất lạc. Chỉ so sánh dữ liệu, không khẳng định chủ sở hữu.",
-      "Trả về duy nhất JSON hợp lệ dạng {\"score\": number, \"rationale\": string}. score nằm từ 0 đến 1.",
+      "Trả về duy nhất JSON hợp lệ dạng {\"identifier_score\": number, \"text_score\": number, \"image_score\": number, \"context_score\": number, \"score\": number, \"rationale\": string}. Mỗi điểm nằm từ 0 đến 1.",
       `BÁO MẤT: ${JSON.stringify({ ...report, image_object_keys: undefined })}`,
       `ĐỒ TÌM THẤY: ${JSON.stringify({ ...item, image_object_keys: undefined })}`,
       "Chấm điểm dựa trên tên, danh mục, đặc điểm, hình ảnh, thời gian và địa điểm. Hình ảnh chỉ là bằng chứng hỗ trợ; thiếu dữ liệu thì giảm điểm.",
@@ -185,16 +223,20 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
   if (existing.rows.length > 0) {
     await pool.query(
       `UPDATE lost_report_matches
-       SET score = $1, rationale = $2, provider = $3, model = $4, status = $5
-       WHERE id = $6`,
-      [result.score, result.rationale, provider, model, matchStatus, existing.rows[0].id],
+       SET score = $1, identifier_score = $2, text_score = $3, image_score = $4,
+           context_score = $5, rationale = $6, provider = $7, model = $8, status = $9
+       WHERE id = $10`,
+      [result.score, result.identifierScore, result.textScore, result.imageScore, result.contextScore,
+        result.rationale, provider, model, matchStatus, existing.rows[0].id],
     );
   } else {
     await pool.query(
       `INSERT INTO lost_report_matches
-         (lost_report_id, found_item_id, score, rationale, provider, model, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [reportId, foundItemId, result.score, result.rationale, provider, model, matchStatus],
+         (lost_report_id, found_item_id, score, identifier_score, text_score, image_score,
+          context_score, rationale, provider, model, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [reportId, foundItemId, result.score, result.identifierScore, result.textScore,
+        result.imageScore, result.contextScore, result.rationale, provider, model, matchStatus],
     );
   }
   await logAudit(null, "LOST_ITEM_MATCHED", {
