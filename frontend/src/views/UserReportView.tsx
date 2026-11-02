@@ -9,14 +9,17 @@ import {
   Select,
   Modal,
   Result,
+  Upload,
 } from 'antd';
 import {
   FileAddOutlined,
   InboxOutlined,
   SendOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import { API_BASE } from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import type { RcFile } from 'antd/es/upload';
 
 const { Title, Text } = Typography;
 
@@ -36,6 +39,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
   const [emptySlots, setEmptySlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [successData, setSuccessData] = useState<any | null>(null);
+  const [lostImages, setLostImages] = useState<RcFile[]>([]);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -70,13 +74,29 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
   const handleSubmitLost = async (values: any) => {
     setSubmitting(true);
     try {
+      let imageObjectKeys: string[] = [];
+      if (lostImages.length > 0) {
+        const uploadBody = new FormData();
+        lostImages.forEach((file) => uploadBody.append('images', file));
+        const uploadRes = await fetch(`${API_BASE}/uploads/images`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: uploadBody,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok || !uploadData.success) {
+          throw new Error(uploadData.message || 'Không thể tải ảnh lên');
+        }
+        imageObjectKeys = (uploadData.data || []).map((image: any) => image.object_key);
+      }
+
       const res = await fetch(`${API_BASE}/lost-reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, image_object_keys: imageObjectKeys }),
       });
 
       const data = await res.json();
@@ -91,6 +111,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
         message: 'Báo cáo mất đồ của bạn đã được ghi nhận vào hệ thống.',
       });
       lostForm.resetFields();
+      setLostImages([]);
       if (onReportSuccess) onReportSuccess();
     } catch (err: any) {
       message.error(err.message || 'Gửi báo cáo thất bại, vui lòng thử lại');
@@ -225,6 +246,32 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
                 rows={3}
                 placeholder="Màu sắc, móc khóa đính kèm, vết trầy xước đặc trưng..."
               />
+            </Form.Item>
+
+            <Form.Item
+              label={<span style={{ fontWeight: 600 }}>Ảnh món đồ (không bắt buộc)</span>}
+              extra="Tối đa 3 ảnh, mỗi ảnh không quá 5 MB. Chỉ nhận JPG, PNG hoặc WEBP."
+            >
+              <Upload
+                listType="picture-card"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                maxCount={3}
+                beforeUpload={(file) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    message.error('Mỗi ảnh không được vượt quá 5 MB');
+                    return Upload.LIST_IGNORE;
+                  }
+                  setLostImages((current) => [...current, file].slice(0, 3));
+                  return false;
+                }}
+                onRemove={(file) => {
+                  setLostImages((current) => current.filter((item) => item.uid !== file.uid));
+                }}
+              >
+                <PictureOutlined />
+                <div style={{ marginTop: 8 }}>Chọn ảnh</div>
+              </Upload>
             </Form.Item>
 
             <Form.Item

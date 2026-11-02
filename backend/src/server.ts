@@ -452,6 +452,7 @@ app.post("/api/lost-reports", async (req, res) => {
       lost_location,
       lost_at,
       reporter_contact,
+      image_object_keys,
     } = req.body;
 
     if (
@@ -484,10 +485,11 @@ app.post("/api/lost-reports", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO lost_reports
-       (item_name, category, description, lost_location, lost_at, reporter_contact, user_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'searching')
+       (item_name, category, description, lost_location, lost_at, reporter_contact, user_id, status,
+        image_object_key, image_object_keys)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'searching', $8, $9)
        RETURNING id, item_name, category, description, lost_location,
-                 lost_at, reporter_contact, user_id, status, created_at`,
+                 lost_at, reporter_contact, user_id, status, image_object_key, image_object_keys, created_at`,
       [
         item_name.trim(),
         category || "other",
@@ -496,6 +498,8 @@ app.post("/api/lost-reports", async (req, res) => {
         lost_at || null,
         reporter_contact || null,
         userId,
+        Array.isArray(image_object_keys) && image_object_keys.length > 0 ? image_object_keys[0] : null,
+        Array.isArray(image_object_keys) ? image_object_keys.slice(0, 3) : [],
       ]
     );
 
