@@ -201,6 +201,7 @@ export function App() {
                 <UserProfileView
                   onOpenAuthModal={handleOpenAuthModal}
                   onOpenPwaGuide={() => setPwaGuideOpen(true)}
+                  onOpenMatchedItem={handleOpenItemDetail}
                 />
               )}
             </>

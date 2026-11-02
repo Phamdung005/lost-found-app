@@ -19,7 +19,8 @@ import {
   CloseCircleOutlined,
   UnlockOutlined,
   AppleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  ArrowRightOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config/api';
@@ -29,11 +30,13 @@ const { Title, Text } = Typography;
 interface UserProfileViewProps {
   onOpenAuthModal: (tab: 'login' | 'register') => void;
   onOpenPwaGuide: () => void;
+  onOpenMatchedItem: (item: any) => void;
 }
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({
   onOpenAuthModal,
   onOpenPwaGuide,
+  onOpenMatchedItem,
 }) => {
   const { user, isAuthenticated, logout, token } = useAuth();
   const [claims, setClaims] = useState<any[]>([]);
@@ -71,7 +74,24 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (data.success) setLostReports(data.data || []);
+      if (data.success) {
+        const reports = data.data || [];
+        const reportsWithMatches = await Promise.all(reports.map(async (report: any) => {
+          if (!report.match_count) return report;
+          try {
+            const matchesRes = await fetch(`${API_BASE}/lost-reports/${report.id}/matches`, {
+              headers: { Authorization: "Bearer " + token },
+            });
+            const matchesData = await matchesRes.json();
+            const bestMatch = matchesData.success ? matchesData.data?.[0] : null;
+            return bestMatch ? { ...report, best_match: bestMatch } : report;
+          } catch (error) {
+            console.error('Không thể tải món đồ khớp:', error);
+            return report;
+          }
+        }));
+        setLostReports(reportsWithMatches);
+      }
     } catch (err) {
       console.error('Không thể tải đơn báo mất:', err);
     } finally {
@@ -307,6 +327,27 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     ? ` · Điểm cao nhất ${Math.round(Number(report.best_match_score) * 100)}%`
                     : ' · Đang chờ đối chiếu'}
                 </div>
+                {report.best_match && (
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<ArrowRightOutlined />}
+                    block
+                    style={{ marginTop: 10, borderRadius: 8 }}
+                    onClick={() => onOpenMatchedItem({
+                      id: report.best_match.found_item_id,
+                      item_name: report.best_match.item_name,
+                      category: report.best_match.category,
+                      description: report.best_match.description,
+                      found_location: report.best_match.found_location,
+                      tracking_code: report.best_match.tracking_code,
+                      status: report.best_match.found_item_status,
+                      created_at: report.best_match.created_at,
+                    })}
+                  >
+                    Xem đúng món đồ khớp · {report.best_match.tracking_code}
+                  </Button>
+                )}
               </div>
             ))}
           </div>

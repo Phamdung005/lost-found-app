@@ -56,8 +56,23 @@ app.get("/api/db-check", async (_req, res) => {
   }
 });
 
-app.get("/api/lost-reports/:id/matches", authenticateToken, requireAdmin, async (req, res) => {
+app.get("/api/lost-reports/:id/matches", authenticateToken, async (req, res) => {
   try {
+    const reportResult = await pool.query(
+      "SELECT user_id FROM lost_reports WHERE id = $1",
+      [Number(req.params.id)],
+    );
+    if (reportResult.rowCount === 0) {
+      res.status(404).json({ success: false, message: "Không tìm thấy báo cáo mất đồ" });
+      return;
+    }
+
+    const currentUser = (req as AuthenticatedRequest).user;
+    if (currentUser?.role !== "admin" && reportResult.rows[0].user_id !== currentUser?.id) {
+      res.status(403).json({ success: false, message: "Bạn không có quyền xem kết quả đối chiếu này" });
+      return;
+    }
+
     const result = await pool.query(
       `SELECT lrm.*, fi.item_name, fi.category, fi.description, fi.found_location,
               fi.tracking_code, fi.status AS found_item_status
