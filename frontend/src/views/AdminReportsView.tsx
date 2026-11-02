@@ -373,6 +373,13 @@ export const AdminReportsView: React.FC = () => {
                     </div>
                   )}
 
+                  <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
+                    AI đã đối chiếu: <strong>{report.match_count || 0}</strong> ứng viên
+                    {report.best_match_score !== null && report.best_match_score !== undefined && (
+                      <> · Điểm cao nhất: <strong>{Math.round(Number(report.best_match_score) * 100)}%</strong></>
+                    )}
+                  </div>
+
                   <div style={{ fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                     <span>Liên hệ: <strong style={{ color: '#0f172a' }}>{report.reporter_contact || 'Không để lại'}</strong></span>
                     <span>Báo lúc: {new Date(report.created_at).toLocaleDateString('vi-VN')}</span>

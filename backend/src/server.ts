@@ -12,8 +12,11 @@ import { runAuthMigration } from "./migrations/init_auth.js";
 import { runBusinessMigration } from "./migrations/init_business.js";
 import { runDeviceMigration } from "./migrations/init_device.js";
 import { authenticateToken, requireAdmin } from "./middleware/auth.js";
+import type { AuthenticatedRequest } from "./middleware/auth.js";
 import { createNotification } from "./utils/notifications.js";
 import { parseHardwareConfig } from "./utils/hardware-config.js";
+import { matchLostReportAgainstFoundItems } from "./services/lost-item-matching.js";
+import { logAudit } from "./utils/audit.js";
 
 dotenv.config();
 
@@ -42,6 +45,24 @@ app.get("/api/db-check", async (_req, res) => {
       success: true,
       message: "PostgreSQL connected successfully",
       data: result.rows[0],
+    });
+
+    app.get("/api/lost-reports/:id/matches", authenticateToken, requireAdmin, async (req, res) => {
+      try {
+        const result = await pool.query(
+          `SELECT lrm.*, fi.item_name, fi.category, fi.description, fi.found_location,
+                  fi.tracking_code, fi.status AS found_item_status
+           FROM lost_report_matches lrm
+           JOIN found_items fi ON fi.id = lrm.found_item_id
+           WHERE lrm.lost_report_id = $1
+           ORDER BY lrm.score DESC, lrm.created_at DESC`,
+          [Number(req.params.id)],
+        );
+        res.json({ success: true, data: result.rows });
+      } catch (error) {
+        console.error("Get lost report matches failed:", error);
+        res.status(500).json({ success: false, message: "Không thể lấy kết quả đối chiếu" });
+      }
     });
   } catch (error) {
     console.error("Database connection failed:", error);
@@ -347,24 +368,27 @@ app.get("/api/lost-reports", async (req, res) => {
   try {
     const { search, category } = req.query;
     let query = `
-      SELECT id, item_name, category, description, lost_location,
-             lost_at, reporter_contact, status, created_at
-      FROM lost_reports
+      SELECT lr.id, lr.item_name, lr.category, lr.description, lr.lost_location,
+             lr.lost_at, lr.reporter_contact, lr.status, lr.user_id, lr.created_at,
+             COUNT(lrm.id)::int AS match_count,
+             MAX(lrm.score) AS best_match_score
+      FROM lost_reports lr
+      LEFT JOIN lost_report_matches lrm ON lrm.lost_report_id = lr.id
       WHERE 1=1
     `;
     const params: any[] = [];
 
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`);
-      query += ` AND (LOWER(item_name) LIKE $${params.length} OR LOWER(lost_location) LIKE $${params.length})`;
+      query += ` AND (LOWER(lr.item_name) LIKE $${params.length} OR LOWER(lr.lost_location) LIKE $${params.length})`;
     }
 
     if (category && typeof category === "string" && category !== "all") {
       params.push(category);
-      query += ` AND category = $${params.length}`;
+      query += ` AND lr.category = $${params.length}`;
     }
 
-    query += ` ORDER BY created_at DESC`;
+    query += ` GROUP BY lr.id ORDER BY lr.created_at DESC`;
 
     const result = await pool.query(query, params);
     res.json({ success: true, data: result.rows });
@@ -434,6 +458,17 @@ app.post("/api/lost-reports", async (req, res) => {
     );
 
     const report = result.rows[0];
+    await logAudit(userId, "LOST_REPORT_CREATED", {
+      lost_report_id: report.id,
+      item_name: report.item_name,
+      category: report.category,
+    });
+
+    if (report.id) {
+      void matchLostReportAgainstFoundItems(Number(report.id)).catch((error) => {
+        console.error("Lost report matching failed:", error);
+      });
+    }
 
     // Gửi thông báo cho Admin
     await createNotification({
@@ -489,6 +524,10 @@ app.patch("/api/lost-reports/:id", authenticateToken, requireAdmin, async (req, 
     }
 
     const report = result.rows[0];
+    await logAudit((req as AuthenticatedRequest).user?.id ?? null, "LOST_REPORT_STATUS_UPDATED", {
+      lost_report_id: report.id,
+      status,
+    });
 
     // Gửi thông báo cho người báo mất nếu có user_id
     if (report.user_id) {
@@ -517,6 +556,9 @@ app.delete("/api/lost-reports/:id", authenticateToken, requireAdmin, async (req,
       res.status(404).json({ success: false, message: "Không tìm thấy báo cáo mất đồ" });
       return;
     }
+    await logAudit((req as AuthenticatedRequest).user?.id ?? null, "LOST_REPORT_DELETED", {
+      lost_report_id: Number(id),
+    });
     res.json({ success: true, message: "Đã xóa báo cáo mất đồ thành công" });
   } catch (error) {
     console.error("Delete lost report error:", error);

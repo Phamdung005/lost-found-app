@@ -16,6 +16,7 @@ import {
   SendOutlined,
 } from '@ant-design/icons';
 import { API_BASE } from '../config/api';
+import { useAuth } from '../context/AuthContext';
 
 const { Title, Text } = Typography;
 
@@ -35,6 +36,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
   const [emptySlots, setEmptySlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [successData, setSuccessData] = useState<any | null>(null);
+  const { token } = useAuth();
 
   useEffect(() => {
     setReportType(initialType);
@@ -70,7 +72,10 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
     try {
       const res = await fetch(`${API_BASE}/lost-reports`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(values),
       });
 

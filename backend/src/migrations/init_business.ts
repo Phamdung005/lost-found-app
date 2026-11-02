@@ -157,6 +157,23 @@ export async function runBusinessMigration() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lost_report_matches (
+        id SERIAL PRIMARY KEY,
+        lost_report_id INT NOT NULL REFERENCES lost_reports(id) ON DELETE CASCADE,
+        found_item_id INT NOT NULL REFERENCES found_items(id) ON DELETE CASCADE,
+        score NUMERIC(5, 4) NOT NULL CHECK (score >= 0 AND score <= 1),
+        rationale TEXT NOT NULL,
+        provider VARCHAR(50) NOT NULL,
+        model VARCHAR(100) NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'reviewed',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(lost_report_id, found_item_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_lost_report_matches_report
+        ON lost_report_matches(lost_report_id, score DESC);
+    `);
+
     // 5. Tạo bảng found_item_claims
     await client.query(`
       CREATE TABLE IF NOT EXISTS found_item_claims (

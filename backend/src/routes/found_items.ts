@@ -6,6 +6,7 @@ import { authenticateToken } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
+import { matchFoundItemAgainstOpenReports } from "../services/lost-item-matching.js";
 
 const router = Router();
 
@@ -227,6 +228,9 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       tracking_code: trackingCode,
       has_slot: !!finalSlotId,
       slot_code: targetSlotCode,
+    });
+    void matchFoundItemAgainstOpenReports(Number(createdItem.id)).catch((error) => {
+      console.error("Found item matching failed:", error);
     });
 
     // Trích xuất userId nếu có token
