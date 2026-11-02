@@ -300,16 +300,16 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       {/* Lost reports */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 20 }}>
-          <Title level={5} style={{ margin: 0, fontWeight: 700 }}>Đơn báo mất của bạn</Title>
-          <span style={{ fontSize: 12, color: '#64748b' }}>{lostReports.length} đơn</span>
+          <Title level={5} style={{ margin: 0, fontWeight: 700 }}>Lịch sử báo mất</Title>
+          <span style={{ fontSize: 12, color: '#64748b' }}>{lostReports.filter((report) => report.status === 'closed').length} đơn</span>
         </div>
         {loadingLostReports ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin /></div>
-        ) : lostReports.length === 0 ? (
+        ) : lostReports.filter((report) => report.status === 'closed').length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Bạn chưa có đơn báo mất nào." />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {lostReports.map((report) => (
+            {lostReports.filter((report) => report.status === 'closed').map((report) => (
               <div key={report.id} className="card-clean" style={{ margin: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <Text strong>{report.item_name}</Text>
@@ -360,21 +360,21 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           <Title level={5} style={{ margin: 0, fontWeight: 700 }}>
             Yêu cầu nhận đồ của bạn
           </Title>
-          <span style={{ fontSize: 12, color: '#64748b' }}>{claims.length} yêu cầu</span>
+          <span style={{ fontSize: 12, color: '#64748b' }}>{claims.filter((claim) => ['completed', 'rejected'].includes(claim.status)).length} yêu cầu</span>
         </div>
 
         {loadingClaims ? (
           <div style={{ textAlign: 'center', padding: '30px 0' }}>
             <Spin tip="Đang tải danh sách..." />
           </div>
-        ) : claims.length === 0 ? (
+        ) : claims.filter((claim) => ['completed', 'rejected'].includes(claim.status)).length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="Bạn chưa gửi yêu cầu nhận lại đồ nào."
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {claims.map((claim) => {
+            {claims.filter((claim) => ['completed', 'rejected'].includes(claim.status)).map((claim) => {
               const isApproved = claim.status === 'approved';
               const isRedeemingThis = redeemingId === claim.id;
 

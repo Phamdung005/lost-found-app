@@ -23,6 +23,7 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
 }) => {
   const { token } = useAuth();
   const [lostReports, setLostReports] = useState<any[]>([]);
+  const [claims, setClaims] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [quickSearch, setQuickSearch] = useState('');
 
@@ -31,11 +32,18 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/lost-reports/my`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: 'Bearer ' + token },
       });
       const data = await res.json();
       if (data.success) {
-        setLostReports((data.data || []).slice(0, 4));
+        setLostReports((data.data || []).filter((report: any) => report.status !== 'closed').slice(0, 4));
+      }
+      const claimsRes = await fetch(`${API_BASE}/claims/my`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      const claimsData = await claimsRes.json();
+      if (claimsData.success) {
+        setClaims((claimsData.data || []).filter((claim: any) => ['pending', 'approved'].includes(claim.status)).slice(0, 4));
       }
     } catch (err) {
       console.error('Không thể tải đơn báo mất:', err);
@@ -149,7 +157,7 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
       <div style={{ marginTop: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Title level={5} style={{ margin: 0, fontWeight: 700 }}>
-            Đơn báo mất của tôi
+            Đơn đang xử lý
           </Title>
           <Button
             type="link"
@@ -165,13 +173,29 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
           <div style={{ textAlign: 'center', padding: '30px 0' }}>
             <Spin tip="Đang tải dữ liệu..." />
           </div>
-        ) : lostReports.length === 0 ? (
+        ) : lostReports.length === 0 && claims.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Bạn chưa gửi đơn báo mất nào."
+            description="Bạn không có yêu cầu nào đang xử lý."
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {claims.map((claim) => (
+              <div key={`claim-${claim.id}`} className="card-clean" style={{ margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: '#ecfdf5', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                    <KeyOutlined />
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: 14, display: 'block', color: '#0f172a' }}>{claim.item_name}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Yêu cầu nhận đồ · {new Date(claim.created_at).toLocaleDateString('vi-VN')}</Text>
+                  </div>
+                </div>
+                <Tag color={claim.status === 'approved' ? 'success' : 'processing'} style={{ margin: 0, borderRadius: 6 }}>
+                  {claim.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'}
+                </Tag>
+              </div>
+            ))}
             {lostReports.map((report) => (
               <div
                 key={report.id}
