@@ -218,6 +218,11 @@ export async function runBusinessMigration() {
       );
     `);
 
+    await client.query(`
+      ALTER TABLE found_item_claims
+      ADD COLUMN IF NOT EXISTS proof_image_object_keys JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `);
+
     // 6. Tạo bảng access_logs nếu chưa tồn tại
     await client.query(`
       CREATE TABLE IF NOT EXISTS access_logs (

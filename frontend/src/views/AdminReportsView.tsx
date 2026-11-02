@@ -295,6 +295,18 @@ export const AdminReportsView: React.FC = () => {
                       <Text type="secondary" style={{ fontSize: 12 }}>Bằng chứng cung cấp: </Text>
                       <span style={{ fontWeight: 600, color: '#1e40af' }}>{claim.proof_description}</span>
                     </div>
+                    {claim.proof_image_urls?.length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {claim.proof_image_urls.map((url: string) => (
+                          <img
+                            key={url}
+                            src={url}
+                            alt="Ảnh bằng chứng của người yêu cầu"
+                            style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }}
+                          />
+                        ))}
+                      </div>
+                    )}
                     <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, marginBottom: 8 }}>
                       <div style={{ color: '#475569', fontSize: 12, marginBottom: 3 }}>
                         Mô tả bí mật do người nhặt cung cấp:

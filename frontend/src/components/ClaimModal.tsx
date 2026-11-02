@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Button, Typography, Space, message, Alert } from 'antd';
-import { SafetyCertificateOutlined } from '@ant-design/icons';
+import { Alert, Button, Form, Input, Modal, Space, Typography, Upload, message } from 'antd';
+import { SafetyCertificateOutlined, UploadOutlined } from '@ant-design/icons';
+import type { RcFile } from 'antd/es/upload';
+import { API_BASE } from '../config/api';
 import { useAuth } from '../context/AuthContext';
 
 const { Text, Paragraph } = Typography;
@@ -12,11 +14,10 @@ interface ClaimModalProps {
   onSuccess: () => void;
 }
 
-import { API_BASE } from '../config/api';
-
 export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, onSuccess }) => {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
+  const [images, setImages] = useState<RcFile[]>([]);
   const { token, isAuthenticated } = useAuth();
 
   const handleSubmit = async (values: any) => {
@@ -27,6 +28,24 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, on
 
     setSubmitting(true);
     try {
+      let proofImageObjectKeys: string[] = [];
+      if (images.length > 0) {
+        const uploadBody = new FormData();
+        images.forEach((file) => uploadBody.append('images', file));
+        const uploadRes = await fetch(`${API_BASE}/uploads/images`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: uploadBody,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok || !uploadData.success) {
+          throw new Error(uploadData.message || 'Không thể tải ảnh bằng chứng lên');
+        }
+        proofImageObjectKeys = (uploadData.data || []).map(
+          (image: { object_key: string }) => image.object_key,
+        );
+      }
+
       const res = await fetch(`${API_BASE}/claims`, {
         method: 'POST',
         headers: {
@@ -37,6 +56,7 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, on
           found_item_id: item.id,
           proof_description: values.proof_description,
           proof_contact: values.proof_contact,
+          proof_image_object_keys: proofImageObjectKeys,
         }),
       });
 
@@ -47,6 +67,7 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, on
 
       message.success('Đã gửi yêu cầu nhận đồ! Quản trị viên sẽ sớm xác minh.');
       form.resetFields();
+      setImages([]);
       onSuccess();
       onCancel();
     } catch (err: any) {
@@ -94,10 +115,27 @@ export const ClaimModal: React.FC<ClaimModalProps> = ({ open, item, onCancel, on
           ]}
           extra="Ví dụ: Họ tên trên giấy tờ bên trong, màu sắc móc khóa, vết trầy xước đặc biệt..."
         >
-          <Input.TextArea
-            rows={4}
-            placeholder="Mô tả chi tiết những gì bên trong hoặc đặc điểm chỉ bạn mới biết..."
-          />
+          <Input.TextArea rows={4} placeholder="Mô tả chi tiết những gì bên trong hoặc đặc điểm chỉ bạn mới biết..." />
+        </Form.Item>
+
+        <Form.Item label="Ảnh bằng chứng (không bắt buộc)" extra="Tối đa 3 ảnh, mỗi ảnh không quá 5 MB.">
+          <Upload
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            maxCount={3}
+            beforeUpload={(file) => {
+              if (file.size > 5 * 1024 * 1024) {
+                message.error('Mỗi ảnh không được vượt quá 5 MB');
+                return Upload.LIST_IGNORE;
+              }
+              setImages((current) => [...current, file].slice(0, 3));
+              return false;
+            }}
+            onRemove={(file) => setImages((current) => current.filter((image) => image.uid !== file.uid))}
+            fileList={images}
+          >
+            <Button icon={<UploadOutlined />}>Chọn ảnh</Button>
+          </Upload>
         </Form.Item>
 
         <Form.Item

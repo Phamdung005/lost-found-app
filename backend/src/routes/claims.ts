@@ -7,6 +7,7 @@ import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
+import { createObjectReadUrls } from "../services/object-storage.js";
 
 const router = Router();
 
@@ -19,7 +20,7 @@ function generateClaimCode(): string {
 router.post("/", authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { found_item_id, proof_description, proof_contact } = req.body;
+    const { found_item_id, proof_description, proof_contact, proof_image_object_keys } = req.body;
 
     if (!found_item_id || isNaN(Number(found_item_id))) {
       res.status(400).json({ success: false, message: "ID món đồ không hợp lệ" });
@@ -69,10 +70,20 @@ router.post("/", authenticateToken, async (req: AuthenticatedRequest, res: Respo
     }
 
     const result = await pool.query(
-      `INSERT INTO found_item_claims (found_item_id, user_id, proof_description, proof_contact, status)
-       VALUES ($1, $2, $3, $4, 'pending')
-       RETURNING id, found_item_id, user_id, proof_description, proof_contact, status, created_at`,
-      [Number(found_item_id), userId, proof_description.trim(), proof_contact || null]
+      `INSERT INTO found_item_claims
+         (found_item_id, user_id, proof_description, proof_contact, proof_image_object_keys, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')
+       RETURNING id, found_item_id, user_id, proof_description, proof_contact,
+                 proof_image_object_keys, status, created_at`,
+      [
+        Number(found_item_id),
+        userId,
+        proof_description.trim(),
+        proof_contact || null,
+        JSON.stringify(Array.isArray(proof_image_object_keys)
+          ? proof_image_object_keys.filter((key): key is string => typeof key === "string").slice(0, 3)
+          : []),
+      ]
     );
 
     const newClaim = result.rows[0];
@@ -146,9 +157,15 @@ router.get("/my", authenticateToken, async (req: AuthenticatedRequest, res: Resp
       [userId]
     );
 
+    const claims = await Promise.all(result.rows.map(async (claim) => ({
+      ...claim,
+      proof_image_urls: await createObjectReadUrls(claim.proof_image_object_keys),
+      proof_image_object_keys: undefined,
+    })));
+
     res.json({
       success: true,
-      data: result.rows,
+      data: claims,
     });
   } catch (error) {
     console.error("Get my claims error:", error);
@@ -167,6 +184,7 @@ router.get("/", authenticateToken, requireAdmin, async (req: AuthenticatedReques
         c.user_id,
         c.proof_description,
         c.proof_contact,
+        c.proof_image_object_keys,
         c.status,
         c.claim_code,
         c.code_expires_at,
@@ -211,9 +229,15 @@ router.get("/", authenticateToken, requireAdmin, async (req: AuthenticatedReques
 
     const result = await pool.query(query, params);
 
+    const claims = await Promise.all(result.rows.map(async (claim) => ({
+      ...claim,
+      proof_image_urls: await createObjectReadUrls(claim.proof_image_object_keys),
+      proof_image_object_keys: undefined,
+    })));
+
     res.json({
       success: true,
-      data: result.rows,
+      data: claims,
     });
   } catch (error) {
     console.error("Get all claims error:", error);
@@ -231,6 +255,7 @@ router.get("/pending", authenticateToken, requireAdmin, async (_req: Authenticat
          c.user_id,
          c.proof_description,
          c.proof_contact,
+         c.proof_image_object_keys,
          c.status,
          c.claim_code,
          c.code_expires_at,
@@ -269,9 +294,15 @@ router.get("/pending", authenticateToken, requireAdmin, async (_req: Authenticat
        ORDER BY c.id DESC`
     );
 
+    const claims = await Promise.all(result.rows.map(async (claim) => ({
+      ...claim,
+      proof_image_urls: await createObjectReadUrls(claim.proof_image_object_keys),
+      proof_image_object_keys: undefined,
+    })));
+
     res.json({
       success: true,
-      data: result.rows,
+      data: claims,
     });
   } catch (error) {
     console.error("Get pending claims error:", error);
