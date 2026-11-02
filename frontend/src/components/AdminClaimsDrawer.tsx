@@ -182,7 +182,7 @@ export const AdminClaimsDrawer: React.FC<AdminClaimsDrawerProps> = ({
           );
         if (status === 'completed') return <Tag color="default">Đã nhận xong</Tag>;
         if (status === 'rejected') return <Tag color="error">Đã từ chối</Tag>;
-        return <Tag>{status}</Tag>;
+        return <Tag>Trạng thái khác</Tag>;
       },
     },
     {

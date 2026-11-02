@@ -257,7 +257,7 @@ export const AdminOverviewView: React.FC<AdminOverviewViewProps> = ({ onNavigate
                   </div>
                 </div>
                 <Tag color={report.status === 'pending' ? 'processing' : 'default'} style={{ margin: 0, fontSize: 11 }}>
-                  {report.status === 'pending' ? 'Đang chờ' : report.status}
+                  {report.status === 'pending' ? 'Đang chờ' : report.status === 'found' ? 'Đã tìm thấy' : report.status === 'closed' ? 'Đã đóng' : 'Đang tìm kiếm'}
                 </Tag>
               </div>
             ))}

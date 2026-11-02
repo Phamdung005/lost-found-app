@@ -160,7 +160,7 @@ export const LockerControlDrawer: React.FC<LockerControlDrawerProps> = ({
         if (status === 'executing') return <Tag color="processing" icon={<ClockCircleOutlined />}>Đang thực thi</Tag>;
         if (status === 'pending') return <Tag color="warning" icon={<ClockCircleOutlined />}>Chờ thiết bị</Tag>;
         if (status === 'failed') return <Tag color="error" icon={<CloseCircleOutlined />}>Thất bại</Tag>;
-        return <Tag>{status}</Tag>;
+        return <Tag>Trạng thái khác</Tag>;
       },
     },
     {

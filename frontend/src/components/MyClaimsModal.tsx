@@ -132,7 +132,7 @@ export const MyClaimsModal: React.FC<MyClaimsModalProps> = ({ open, onCancel, on
       case 'expired':
         return <Tag color="warning">Mã đã hết hạn</Tag>;
       default:
-        return <Tag>{status}</Tag>;
+        return <Tag>Trạng thái khác</Tag>;
     }
   };
 

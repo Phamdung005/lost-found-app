@@ -158,7 +158,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       case 'completed':
         return <Tag icon={<CheckCircleOutlined />} color="default">Đã nhận đồ</Tag>;
       default:
-        return <Tag>{status}</Tag>;
+        return <Tag>Trạng thái khác</Tag>;
     }
   };
 
