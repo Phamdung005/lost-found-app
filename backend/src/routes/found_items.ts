@@ -31,6 +31,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       found_location,
       found_at,
       image_url,
+      image_object_keys,
       finder_contact,
       slot_id,
       slot_code,
@@ -147,6 +148,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
     }
 
     const trackingCode = generateTrackingCode();
+    const imageKeys = Array.isArray(image_object_keys) ? image_object_keys.slice(0, 3) : [];
+    const primaryImageKey = imageKeys[0] || image_url || null;
 
     // Kiểm tra xem bảng found_items hiện có các cột nào (slot_id, locker_slot_id) để insert an toàn 100%
     const colCheck = await client.query(
@@ -160,11 +163,11 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 
     if (existingCols.includes("slot_id") && existingCols.includes("locker_slot_id")) {
       insertQuery = `INSERT INTO found_items 
-        (item_name, category, description, found_location, found_at, image_url, 
+        (item_name, category, description, found_location, found_at, image_url, image_object_key, image_object_keys,
          finder_contact, slot_id, locker_slot_id, status, tracking_code)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id, item_name, category, description, found_location, found_at,
-                  image_url, finder_contact, status, tracking_code`;
+                  image_url, image_object_key, image_object_keys, finder_contact, status, tracking_code`;
       insertParams = [
         item_name.trim(),
         category || "other",
@@ -172,6 +175,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         found_location.trim(),
         found_at || new Date(),
         image_url || null,
+        image_url || null,
+        imageKeys,
         finder_contact || null,
         finalSlotId,
         finalSlotId,
@@ -180,11 +185,11 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       ];
     } else if (existingCols.includes("slot_id")) {
       insertQuery = `INSERT INTO found_items 
-        (item_name, category, description, found_location, found_at, image_url, 
+        (item_name, category, description, found_location, found_at, image_url, image_object_key, image_object_keys,
          finder_contact, slot_id, status, tracking_code)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id, item_name, category, description, found_location, found_at,
-                  image_url, finder_contact, status, tracking_code`;
+                  image_url, image_object_key, image_object_keys, finder_contact, status, tracking_code`;
       insertParams = [
         item_name.trim(),
         category || "other",
@@ -192,6 +197,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         found_location.trim(),
         found_at || new Date(),
         image_url || null,
+        primaryImageKey,
+        imageKeys,
         finder_contact || null,
         finalSlotId,
         initialStatus,
@@ -199,18 +206,20 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       ];
     } else {
       insertQuery = `INSERT INTO found_items 
-        (item_name, category, description, found_location, found_at, image_url, 
+        (item_name, category, description, found_location, found_at, image_url, image_object_key, image_object_keys,
          finder_contact, locker_slot_id, status, tracking_code)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id, item_name, category, description, found_location, found_at,
-                  image_url, finder_contact, status, tracking_code`;
+                  image_url, image_object_key, image_object_keys, finder_contact, status, tracking_code`;
       insertParams = [
         item_name.trim(),
         category || "other",
         description || null,
         found_location.trim(),
         found_at || new Date(),
-        image_url || null,
+        primaryImageKey,
+        primaryImageKey,
+        imageKeys,
         finder_contact || null,
         finalSlotId,
         initialStatus,

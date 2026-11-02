@@ -13,12 +13,14 @@ import {
   Alert,
   Card,
   Tag,
+  Upload,
 } from 'antd';
 import {
   InboxOutlined,
   CheckCircleOutlined,
   EnvironmentOutlined,
   PhoneOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -32,6 +34,8 @@ interface DepositItemModalProps {
 }
 
 import { API_BASE } from '../config/api';
+import { useAuth } from '../context/AuthContext';
+import type { RcFile } from 'antd/es/upload';
 
 export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCancel, onSuccess }) => {
   const [form] = Form.useForm();
@@ -39,6 +43,8 @@ export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCanc
   const [depositType, setDepositType] = useState<'locker' | 'online_only'>('locker');
   const [emptySlots, setEmptySlots] = useState<any[]>([]);
   const [successData, setSuccessData] = useState<any | null>(null);
+  const [images, setImages] = useState<RcFile[]>([]);
+  const { token } = useAuth();
 
   // Lấy danh sách các ngăn tủ còn trống
   const loadAvailableSlots = async () => {
@@ -62,6 +68,7 @@ export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCanc
   useEffect(() => {
     if (open) {
       setSuccessData(null);
+      setImages([]);
       form.resetFields();
       void loadAvailableSlots();
     }
@@ -70,6 +77,22 @@ export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCanc
   const handleSubmit = async (values: any) => {
     setSubmitting(true);
     try {
+      let imageObjectKeys: string[] = [];
+      if (images.length > 0) {
+        const uploadBody = new FormData();
+        images.forEach((file) => uploadBody.append('images', file));
+        const uploadRes = await fetch(`${API_BASE}/uploads/images`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: uploadBody,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok || !uploadData.success) {
+          throw new Error(uploadData.message || 'Không thể tải ảnh lên');
+        }
+        imageObjectKeys = (uploadData.data || []).map((image: any) => image.object_key);
+      }
+
       const payload = {
         item_name: values.item_name,
         category: values.category || 'other',
@@ -78,6 +101,7 @@ export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCanc
         found_at: values.found_at ? values.found_at.toISOString() : new Date().toISOString(),
         finder_contact: values.finder_contact,
         image_url: values.image_url,
+        image_object_keys: imageObjectKeys,
         slot_id: depositType === 'locker' ? values.slot_id : null,
       };
 
@@ -214,6 +238,32 @@ export const DepositItemModal: React.FC<DepositItemModalProps> = ({ open, onCanc
                 rows={3}
                 placeholder="Ví dụ: Bên trong có CCCD tên Nguyễn Văn A, số đuôi điện thoại 888..."
               />
+            </Form.Item>
+
+            <Form.Item
+              label="Ảnh món đồ (không bắt buộc)"
+              extra="Tối đa 3 ảnh, mỗi ảnh không quá 5 MB."
+            >
+              <Upload
+                listType="picture-card"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                maxCount={3}
+                beforeUpload={(file) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    message.error('Mỗi ảnh không được vượt quá 5 MB');
+                    return Upload.LIST_IGNORE;
+                  }
+                  setImages((current) => [...current, file].slice(0, 3));
+                  return false;
+                }}
+                onRemove={(file) => {
+                  setImages((current) => current.filter((item) => item.uid !== file.uid));
+                }}
+              >
+                <PictureOutlined />
+                <div style={{ marginTop: 8 }}>Chọn ảnh</div>
+              </Upload>
             </Form.Item>
 
             <Form.Item name="finder_contact" label="Thông tin liên hệ của bạn (Tùy chọn)">

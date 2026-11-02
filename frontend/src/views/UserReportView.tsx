@@ -40,6 +40,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [successData, setSuccessData] = useState<any | null>(null);
   const [lostImages, setLostImages] = useState<RcFile[]>([]);
+  const [foundImages, setFoundImages] = useState<RcFile[]>([]);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -124,6 +125,22 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
   const handleSubmitFound = async (values: any) => {
     setSubmitting(true);
     try {
+      let imageObjectKeys: string[] = [];
+      if (foundImages.length > 0) {
+        const uploadBody = new FormData();
+        foundImages.forEach((file) => uploadBody.append('images', file));
+        const uploadRes = await fetch(`${API_BASE}/uploads/images`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: uploadBody,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok || !uploadData.success) {
+          throw new Error(uploadData.message || 'Không thể tải ảnh lên');
+        }
+        imageObjectKeys = (uploadData.data || []).map((image: any) => image.object_key);
+      }
+
       const res = await fetch(`${API_BASE}/found-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,6 +151,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
           locker_code: 'L-001',
           slot_code: values.slot_code,
           finder_contact: values.finder_contact,
+          image_object_keys: imageObjectKeys,
         }),
       });
 
@@ -150,6 +168,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
         message: `Món đồ đã được tiếp nhận thành công vào ngăn ${values.slot_code}. Cửa ngăn tủ đã được kích hoạt mở để cất đồ!`,
       });
       foundForm.resetFields();
+      setFoundImages([]);
       void fetchEmptySlots();
       if (onReportSuccess) onReportSuccess();
     } catch (err: any) {
@@ -374,6 +393,32 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
               label={<span style={{ fontWeight: 600 }}>Thông tin người gửi (tùy chọn)</span>}
             >
               <Input placeholder="Số điện thoại hoặc tên người nhặt..." size="large" />
+            </Form.Item>
+
+            <Form.Item
+              label={<span style={{ fontWeight: 600 }}>Ảnh món đồ (không bắt buộc)</span>}
+              extra="Tối đa 3 ảnh, mỗi ảnh không quá 5 MB."
+            >
+              <Upload
+                listType="picture-card"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                maxCount={3}
+                beforeUpload={(file) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    message.error('Mỗi ảnh không được vượt quá 5 MB');
+                    return Upload.LIST_IGNORE;
+                  }
+                  setFoundImages((current) => [...current, file].slice(0, 3));
+                  return false;
+                }}
+                onRemove={(file) => {
+                  setFoundImages((current) => current.filter((item) => item.uid !== file.uid));
+                }}
+              >
+                <PictureOutlined />
+                <div style={{ marginTop: 8 }}>Chọn ảnh</div>
+              </Upload>
             </Form.Item>
 
             <Button
