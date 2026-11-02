@@ -383,11 +383,12 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
 
     // Xử lý dữ liệu trả về cho User: ẩn mã ngăn chi tiết A01/A02, chỉ hiển thị tên tủ tổng quan
     const safeData = await Promise.all(result.rows.map(async (row) => {
-      const imageUrls = await createObjectReadUrls(row.image_object_keys);
+      const imageUrls = isAdmin ? await createObjectReadUrls(row.image_object_keys) : [];
       const itemWithImages = {
         ...row,
+        image_object_keys: undefined,
         image_urls: imageUrls,
-        image_url: imageUrls[0] || row.image_url || null,
+        image_url: imageUrls[0] || (isAdmin ? row.image_url : null),
       };
       if (!isAdmin) {
         return {
@@ -466,9 +467,10 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     }
 
     const item = result.rows[0];
-    const imageUrls = await createObjectReadUrls(item.image_object_keys);
+    const imageUrls = isAdmin ? await createObjectReadUrls(item.image_object_keys) : [];
+    item.image_object_keys = undefined;
     item.image_urls = imageUrls;
-    item.image_url = imageUrls[0] || item.image_url || null;
+    item.image_url = imageUrls[0] || (isAdmin ? item.image_url : null);
     if (!isAdmin) {
       item.slot_code = item.slot_code ? "Đang bảo quản trong tủ" : "Chưa gửi vào tủ";
       item.slot_id = undefined;

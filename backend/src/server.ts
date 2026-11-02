@@ -36,6 +36,22 @@ app.use("/api/device", deviceRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/uploads", uploadsRouter);
 
+function isAdminRequest(req: express.Request): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return false;
+
+  try {
+    const token = authHeader.slice("Bearer ".length);
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "findbox_super_secret_jwt_key_2026_demo",
+    ) as { role?: string };
+    return decoded.role === "admin";
+  } catch {
+    return false;
+  }
+}
+
 app.get("/api/db-check", async (_req, res) => {
   try {
     const result = await pool.query(`
@@ -85,10 +101,12 @@ app.get("/api/lost-reports/:id/matches", authenticateToken, async (req, res) => 
        ORDER BY lrm.score DESC, lrm.created_at DESC`,
       [Number(req.params.id)],
     );
+    const canViewImages = (req as AuthenticatedRequest).user?.role === "admin";
     const matches = await Promise.all(result.rows.map(async (match) => {
-      const imageUrls = await createObjectReadUrls(match.image_object_keys);
+      const imageUrls = canViewImages ? await createObjectReadUrls(match.image_object_keys) : [];
       return {
         ...match,
+        image_object_keys: undefined,
         image_urls: imageUrls,
         image_url: imageUrls[0] || null,
       };
@@ -418,10 +436,12 @@ app.get("/api/lost-reports", async (req, res) => {
 
     query += ` GROUP BY lr.id ORDER BY lr.created_at DESC`;
 
+    const canViewImages = isAdminRequest(req);
     const result = await pool.query(query, params);
     const reports = await Promise.all(result.rows.map(async (report) => ({
       ...report,
-      image_urls: await createObjectReadUrls(report.image_object_keys),
+      image_object_keys: undefined,
+      image_urls: canViewImages ? await createObjectReadUrls(report.image_object_keys) : [],
     })));
     res.json({ success: true, data: reports });
   } catch (error) {
@@ -453,7 +473,8 @@ app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
     );
     const reports = await Promise.all(result.rows.map(async (report) => ({
       ...report,
-      image_urls: await createObjectReadUrls(report.image_object_keys),
+      image_object_keys: undefined,
+      image_urls: [],
     })));
     res.json({ success: true, data: reports });
   } catch (error) {
