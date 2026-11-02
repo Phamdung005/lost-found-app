@@ -63,7 +63,7 @@ function getGeminiConfig(): { apiKey: string; model: string } | null {
   if (!apiKey) return null;
   return {
     apiKey,
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
   };
 }
 
@@ -71,7 +71,7 @@ export function getGeminiStatus(): { configured: boolean; model: string } {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   return {
     configured: Boolean(apiKey),
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
   };
 }
 
@@ -209,7 +209,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
     try {
       result = await askGemini(reportData, itemData);
       provider = "gemini";
-      model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+      model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown matching error";
     await logAudit(null, "LOST_ITEM_MATCH_FAILED", {
