@@ -7,6 +7,33 @@ interface GeminiMatchResult {
   rationale: string;
 }
 
+function normalizeText(value: unknown): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase();
+}
+
+function findDistinctiveIdentifiers(value: unknown): string[] {
+  return normalizeText(value).match(/\b\d{6,}\b/g) || [];
+}
+
+export function findExactMatch(report: Record<string, unknown>, item: Record<string, unknown>): GeminiMatchResult | null {
+  const reportText = `${report.item_name || ""} ${report.description || ""}`;
+  const itemText = `${item.item_name || ""} ${item.description || ""}`;
+  const reportIdentifiers = findDistinctiveIdentifiers(reportText);
+  const itemIdentifiers = new Set(findDistinctiveIdentifiers(itemText));
+  const sharedIdentifier = reportIdentifiers.find((identifier) => itemIdentifiers.has(identifier));
+  if (sharedIdentifier) {
+    return {
+      score: 1,
+      rationale: `Khớp chính xác mã định danh ${sharedIdentifier} giữa đơn báo mất và mô tả vật lưu trữ.`,
+    };
+  }
+  return null;
+}
+
 function getGeminiConfig(): { apiKey: string; model: string } | null {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
@@ -83,30 +110,35 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
   if (row.report_status !== "searching" || row.item_status === "returned") return;
 
   const existing = await pool.query(
-    "SELECT id FROM lost_report_matches WHERE lost_report_id = $1 AND found_item_id = $2",
+    "SELECT id, status FROM lost_report_matches WHERE lost_report_id = $1 AND found_item_id = $2",
     [reportId, foundItemId],
   );
-  if (existing.rows.length > 0) return;
+  const reportData = {
+    item_name: row.report_item_name,
+    category: row.report_category,
+    description: row.report_description,
+    lost_location: row.lost_location,
+    lost_at: row.lost_at,
+  };
+  const itemData = {
+    item_name: row.item_name,
+    category: row.category,
+    description: row.description,
+    found_location: row.found_location,
+    found_at: row.found_at,
+  };
+  let result = findExactMatch(reportData, itemData);
+  let provider = "deterministic";
+  let model = "exact-identifier";
 
-  let result: GeminiMatchResult;
-  try {
-    result = await askGemini(
-      {
-        item_name: row.report_item_name,
-        category: row.report_category,
-        description: row.report_description,
-        lost_location: row.lost_location,
-        lost_at: row.lost_at,
-      },
-      {
-        item_name: row.item_name,
-        category: row.category,
-        description: row.description,
-        found_location: row.found_location,
-        found_at: row.found_at,
-      },
-    );
-  } catch (error) {
+  if (!result && existing.rows.length > 0) return;
+
+  if (!result) {
+    try {
+      result = await askGemini(reportData, itemData);
+      provider = "gemini";
+      model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    } catch (error) {
     await logAudit(null, "LOST_ITEM_MATCH_FAILED", {
       lost_report_id: reportId,
       found_item_id: foundItemId,
@@ -119,16 +151,26 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
       type: "warning",
     });
     return;
+    }
   }
 
   const threshold = Number(process.env.GEMINI_MATCH_THRESHOLD || "0.78");
   const matchStatus = result.score >= threshold ? "notified" : "reviewed";
-  await pool.query(
-    `INSERT INTO lost_report_matches
-       (lost_report_id, found_item_id, score, rationale, provider, model, status)
-     VALUES ($1, $2, $3, $4, 'gemini', $5, $6)`,
-    [reportId, foundItemId, result.score, result.rationale, process.env.GEMINI_MODEL || "gemini-2.0-flash", matchStatus],
-  );
+  if (existing.rows.length > 0) {
+    await pool.query(
+      `UPDATE lost_report_matches
+       SET score = $1, rationale = $2, provider = $3, model = $4, status = $5
+       WHERE id = $6`,
+      [result.score, result.rationale, provider, model, matchStatus, existing.rows[0].id],
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO lost_report_matches
+         (lost_report_id, found_item_id, score, rationale, provider, model, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [reportId, foundItemId, result.score, result.rationale, provider, model, matchStatus],
+    );
+  }
   await logAudit(null, "LOST_ITEM_MATCHED", {
     lost_report_id: reportId,
     found_item_id: foundItemId,
@@ -137,7 +179,7 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
     rationale: result.rationale,
   });
 
-  if (result.score >= threshold && row.report_user_id) {
+  if (result.score >= threshold && row.report_user_id && existing.rows[0]?.status !== "notified") {
     await pool.query(
       "UPDATE lost_reports SET status = 'found', updated_at = now() WHERE id = $1 AND status = 'searching'",
       [reportId],
