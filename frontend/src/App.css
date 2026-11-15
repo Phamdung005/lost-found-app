@@ -108,7 +108,24 @@ body {
   }
 }
 
-/* Top App Bar - Perfectly adapts to iPhone 13 Notch & Dynamic Island */
+/* ============================================================
+   ANT DESIGN GLOBAL OVERRIDES — Fix toast/notification on iPhone notch
+   ============================================================ */
+
+/* Push Ant Design message (toast) below iPhone notch / Dynamic Island */
+.ant-message {
+  top: calc(env(safe-area-inset-top, 0px) + 10px) !important;
+  padding-top: 0 !important;
+}
+
+/* Push Ant Design notification below notch */
+.ant-notification {
+  top: calc(env(safe-area-inset-top, 0px) + 10px) !important;
+}
+
+/* ============================================================
+   TOP APP BAR — Perfectly adapts to iPhone 13 Notch & Dynamic Island
+   ============================================================ */
 .mobile-top-bar {
   position: sticky;
   top: 0;
@@ -167,7 +184,7 @@ body {
 .mobile-content-area {
   flex: 1;
   padding: 14px 16px;
-  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 20px);
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 4px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
