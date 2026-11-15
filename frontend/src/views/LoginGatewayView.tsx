@@ -148,7 +148,15 @@ export const LoginGatewayView: React.FC<LoginGatewayViewProps> = ({ onOpenPwaGui
   };
 
   return (
-    <div style={{ padding: '24px 16px 40px', maxWidth: 420, margin: '0 auto' }}>
+    <div
+      style={{
+        padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 16px calc(env(safe-area-inset-bottom, 0px) + 30px)',
+        width: '100%',
+        maxWidth: 420,
+        margin: '0 auto',
+        minHeight: '100dvh',
+      }}
+    >
       {/* Brand Header */}
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
         <div

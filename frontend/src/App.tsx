@@ -90,7 +90,7 @@ export function App() {
   if (loading) {
     return (
       <AntApp>
-        <div className="mobile-app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <div className="mobile-app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh' }}>
           <Spin size="large" tip="Đang khởi động FindBox..." />
         </div>
       </AntApp>
@@ -101,7 +101,7 @@ export function App() {
   if (!isAuthenticated) {
     return (
       <AntApp>
-        <div className="mobile-app-container" style={{ minHeight: '100vh', justifyContent: 'center' }}>
+        <div className="mobile-app-container" style={{ minHeight: '100dvh', justifyContent: 'center' }}>
           <LoginGatewayView onOpenPwaGuide={() => setPwaGuideOpen(true)} />
           <PWAInstallGuideModal
             open={pwaGuideOpen}
