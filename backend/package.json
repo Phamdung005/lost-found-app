@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "pg": "^8.23.1",
+    "sharp": "^0.35.5",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
@@ -33,6 +34,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
+    "@types/sharp": "^0.31.1",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }
