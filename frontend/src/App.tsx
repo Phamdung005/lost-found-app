@@ -18,6 +18,7 @@ import { AdminReportsView } from './views/AdminReportsView';
 import { AdminLockersView } from './views/AdminLockersView';
 import { AdminAccountView } from './views/AdminAccountView';
 import { AdminFoundItemsView } from './views/AdminFoundItemsView';
+import { AdminUsersView } from './views/AdminUsersView';
 import { AuthModal } from './components/AuthModal';
 import { ClaimModal } from './components/ClaimModal';
 import { PWAInstallGuideModal } from './components/PWAInstallGuideModal';
@@ -214,6 +215,9 @@ export function App() {
               )}
               {currentTab === 'admin_items' && (
                 <AdminFoundItemsView />
+              )}
+              {currentTab === 'admin_users' && (
+                <AdminUsersView />
               )}
               {currentTab === 'admin_lockers' && (
                 <AdminLockersView />

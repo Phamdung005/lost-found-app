@@ -9,6 +9,7 @@ import claimsRouter from "./routes/claims.js";
 import deviceRouter from "./routes/device.js";
 import notificationsRouter from "./routes/notifications.js";
 import uploadsRouter from "./routes/uploads.js";
+import usersRouter from "./routes/users.js";
 import { runAuthMigration } from "./migrations/init_auth.js";
 import { runBusinessMigration } from "./migrations/init_business.js";
 import { runDeviceMigration } from "./migrations/init_device.js";
@@ -35,6 +36,7 @@ app.use("/api/claims", claimsRouter);
 app.use("/api/device", deviceRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/uploads", uploadsRouter);
+app.use("/api/users", usersRouter);
 
 function isAdminRequest(req: express.Request): boolean {
   const authHeader = req.headers.authorization;

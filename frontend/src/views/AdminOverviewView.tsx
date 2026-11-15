@@ -5,7 +5,8 @@ import {
   ThunderboltOutlined,
   CheckCircleOutlined,
   RightOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config/api';
@@ -161,6 +162,25 @@ export const AdminOverviewView: React.FC<AdminOverviewViewProps> = ({ onNavigate
           }}
         >
           Điều khiển ngăn tủ IoT (L-001)
+        </Button>
+        <Button
+          size="large"
+          icon={<TeamOutlined />}
+          onClick={() => onNavigateTab('admin_users')}
+          style={{
+            height: 46,
+            borderRadius: 12,
+            fontWeight: 600,
+            color: '#7e22ce',
+            borderColor: '#e9d5ff',
+            background: '#faf5ff',
+            fontSize: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          Quản lý người dùng & phân quyền
         </Button>
       </div>
 
