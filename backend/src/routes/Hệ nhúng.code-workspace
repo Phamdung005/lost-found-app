@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../../../.."
+		},
+		{
+			"name": "HeNhungFirmware",
+			"path": "../../../../HeNhungFirmware"
+		}
+	],
+	"settings": {}
+}

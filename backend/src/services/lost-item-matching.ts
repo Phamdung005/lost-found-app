@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { pool } from "../db.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
@@ -58,12 +59,107 @@ export function findExactMatch(report: Record<string, unknown>, item: Record<str
   return null;
 }
 
+export function evaluateHeuristicFilter(
+  report: Record<string, unknown>,
+  item: Record<string, unknown>,
+): GeminiMatchResult | null {
+  const reportCategory = String(report.category || "").trim().toLowerCase();
+  const itemCategory = String(item.category || "").trim().toLowerCase();
+
+  // 1. Nếu cả 2 đều có danh mục xác định (khác "other") và khác nhau hoàn toàn -> Loại bỏ luôn
+  if (
+    reportCategory &&
+    itemCategory &&
+    reportCategory !== "other" &&
+    itemCategory !== "other" &&
+    reportCategory !== itemCategory
+  ) {
+    return {
+      score: 0.05,
+      rationale: `Danh mục đồ vật không tương đồng (Báo mất: "${reportCategory}", Tìm thấy: "${itemCategory}").`,
+      identifierScore: 0,
+      textScore: 0.05,
+      imageScore: 0,
+      contextScore: 0.1,
+    };
+  }
+
+  // 2. Mâu thuẫn thời gian: Đồ tìm thấy trước ngày báo mất hơn 48h
+  if (report.lost_at && item.found_at) {
+    const lostTime = new Date(String(report.lost_at)).getTime();
+    const foundTime = new Date(String(item.found_at)).getTime();
+    if (!Number.isNaN(lostTime) && !Number.isNaN(foundTime) && foundTime < lostTime - 172800000) {
+      return {
+        score: 0.05,
+        rationale: "Thời điểm tìm thấy đồ vật diễn ra trước thời điểm báo mất quá lâu (> 48 giờ).",
+        identifierScore: 0,
+        textScore: 0.05,
+        imageScore: 0,
+        contextScore: 0,
+      };
+    }
+  }
+
+  // 3. Nếu cả 2 không có ảnh và tên món đồ không có từ khóa nào tương đồng
+  const hasReportImage = Array.isArray(report.image_object_keys) && report.image_object_keys.length > 0;
+  const hasItemImage = Array.isArray(item.image_object_keys) && item.image_object_keys.length > 0;
+  if (!hasReportImage && !hasItemImage) {
+    const reportWords = normalizeText(report.item_name).split(/\s+/).filter((w) => w.length > 1);
+    const itemWords = new Set(normalizeText(item.item_name).split(/\s+/).filter((w) => w.length > 1));
+    const commonWords = reportWords.filter((w) => itemWords.has(w));
+    if (commonWords.length === 0 && reportCategory !== itemCategory) {
+      return {
+        score: 0.1,
+        rationale: "Tên món đồ và đặc điểm không có từ khóa trùng khớp, không có hình ảnh đối chiếu.",
+        identifierScore: 0,
+        textScore: 0.1,
+        imageScore: 0,
+        contextScore: 0.1,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function optimizeImageForAi(
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const resizedBuffer = await sharp(bytes)
+      .resize({
+        width: 800,
+        height: 800,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 75, progressive: true })
+      .toBuffer();
+
+    return {
+      mimeType: "image/jpeg",
+      data: resizedBuffer.toString("base64"),
+    };
+  } catch (err) {
+    console.warn("Resize/nén ảnh thất bại, dùng ảnh gốc:", err);
+    try {
+      return {
+        mimeType: contentType || "image/jpeg",
+        data: Buffer.from(bytes).toString("base64"),
+      };
+    } catch {
+      return null;
+    }
+  }
+}
+
 function getGeminiConfig(): { apiKey: string; model: string } | null {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
   return {
     apiKey,
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash",
   };
 }
 
@@ -71,7 +167,7 @@ export function getGeminiStatus(): { configured: boolean; model: string } {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   return {
     configured: Boolean(apiKey),
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash",
   };
 }
 
@@ -109,22 +205,40 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
   if (!config) throw new Error("Chưa cấu hình GEMINI_API_KEY");
 
   const imageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
-  const imageKeys = [
-    ...(Array.isArray(report.image_object_keys) ? report.image_object_keys : []),
-    ...(Array.isArray(item.image_object_keys) ? item.image_object_keys : []),
-  ].filter((key): key is string => typeof key === "string" && key.trim().length > 0).slice(0, 6);
+  
+  // Chỉ lấy tối đa 1 ảnh đại diện của đơn báo mất và 1 ảnh đại diện của đồ tìm thấy để tối ưu tốc độ
+  const reportKeys = (Array.isArray(report.image_object_keys) ? report.image_object_keys : [])
+    .filter((k): k is string => typeof k === "string" && k.trim().length > 0);
+  const itemKeys = (Array.isArray(item.image_object_keys) ? item.image_object_keys : [])
+    .filter((k): k is string => typeof k === "string" && k.trim().length > 0);
 
-  for (const key of imageKeys) {
-    try {
-      const image = await readObject(key);
+  const selectedKeys: string[] = [];
+  const firstReportKey = reportKeys[0];
+  if (firstReportKey) selectedKeys.push(firstReportKey);
+  const firstItemKey = itemKeys[0];
+  if (firstItemKey) selectedKeys.push(firstItemKey);
+
+  // Đọc và nén ảnh song song
+  const imageResults = await Promise.all(
+    selectedKeys.map(async (key) => {
+      try {
+        const image = await readObject(key);
+        return await optimizeImageForAi(image.bytes, image.contentType);
+      } catch (error) {
+        console.warn(`Không thể đọc ảnh matching ${key}:`, error);
+        return null;
+      }
+    }),
+  );
+
+  for (const img of imageResults) {
+    if (img) {
       imageParts.push({
         inlineData: {
-          mimeType: image.contentType,
-          data: Buffer.from(image.bytes).toString("base64"),
+          mimeType: img.mimeType,
+          data: img.data,
         },
       });
-    } catch (error) {
-      console.warn(`Không thể đọc ảnh matching ${key}:`, error);
     }
   }
 
@@ -168,7 +282,7 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
     if (!retryable || attempt === 2) {
       throw new Error(message);
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+    await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
   }
   throw new Error("Gemini matching retry limit reached");
 }
@@ -217,25 +331,36 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
 
   if (!result && existing.rows.length > 0) return;
 
+  // Lọc nhanh bằng quy tắc Heuristic (danh mục khác nhau, thời gian vô lý,...) để tránh gọi AI lãng phí
+  if (!result) {
+    const heuristic = evaluateHeuristicFilter(reportData, itemData);
+    if (heuristic) {
+      result = heuristic;
+      provider = "heuristic";
+      model = "rule-filter";
+    }
+  }
+
+  // Nếu vẫn chưa xác định được và cần phân tích hình ảnh/mô tả chuyên sâu -> Gọi Gemini
   if (!result) {
     try {
       result = await askGemini(reportData, itemData);
       provider = "gemini";
-      model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+      model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
     } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown matching error";
-    await logAudit(null, "LOST_ITEM_MATCH_FAILED", {
-      lost_report_id: reportId,
-      found_item_id: foundItemId,
-      error: errorMessage,
-    });
-    await createNotification({
-      role: "admin",
-      title: "⚠️ AI đối chiếu báo mất thất bại",
-      message: `Không thể đối chiếu đơn #${reportId} với món đồ #${foundItemId}: ${errorMessage}`,
-      type: "warning",
-    });
-    return;
+      const errorMessage = error instanceof Error ? error.message : "Unknown matching error";
+      await logAudit(null, "LOST_ITEM_MATCH_FAILED", {
+        lost_report_id: reportId,
+        found_item_id: foundItemId,
+        error: errorMessage,
+      });
+      await createNotification({
+        role: "admin",
+        title: "⚠️ AI đối chiếu báo mất thất bại",
+        message: `Không thể đối chiếu đơn #${reportId} với món đồ #${foundItemId}: ${errorMessage}`,
+        type: "warning",
+      });
+      return;
     }
   }
 
@@ -288,18 +413,66 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
 }
 
 export async function matchFoundItemAgainstOpenReports(foundItemId: number): Promise<void> {
-  const reports = await pool.query(
-    "SELECT id FROM lost_reports WHERE status IN ('searching', 'pending') ORDER BY created_at ASC",
+  const itemRes = await pool.query(
+    "SELECT id, category, found_at FROM found_items WHERE id = $1",
+    [foundItemId],
   );
+  if (itemRes.rows.length === 0) return;
+  const item = itemRes.rows[0];
+
+  // Chỉ lấy các đơn báo mất có khả năng liên quan (cùng danh mục hoặc "other") và chưa từng so sánh
+  const reports = await pool.query(
+    `SELECT lr.id
+     FROM lost_reports lr
+     WHERE lr.status IN ('searching', 'pending')
+       AND (
+         lr.category = $1
+         OR lr.category = 'other'
+         OR $1 = 'other'
+         OR lr.category IS NULL
+         OR $1 IS NULL
+       )
+       AND lr.id NOT IN (
+         SELECT lost_report_id FROM lost_report_matches WHERE found_item_id = $2
+       )
+     ORDER BY lr.created_at DESC
+     LIMIT 10`,
+    [item.category || "other", foundItemId],
+  );
+
   for (const report of reports.rows) {
     await matchLostReportWithFoundItem(Number(report.id), foundItemId);
   }
 }
 
 export async function matchLostReportAgainstFoundItems(reportId: number): Promise<void> {
-  const items = await pool.query(
-    "SELECT id FROM found_items WHERE status <> 'returned' ORDER BY created_at DESC",
+  const reportRes = await pool.query(
+    "SELECT id, category, lost_at FROM lost_reports WHERE id = $1",
+    [reportId],
   );
+  if (reportRes.rows.length === 0) return;
+  const report = reportRes.rows[0];
+
+  // Chỉ lấy các món đồ có khả năng liên quan (cùng danh mục hoặc "other") và chưa từng so sánh
+  const items = await pool.query(
+    `SELECT fi.id
+     FROM found_items fi
+     WHERE fi.status <> 'returned'
+       AND (
+         fi.category = $1
+         OR fi.category = 'other'
+         OR $1 = 'other'
+         OR fi.category IS NULL
+         OR $1 IS NULL
+       )
+       AND fi.id NOT IN (
+         SELECT found_item_id FROM lost_report_matches WHERE lost_report_id = $2
+       )
+     ORDER BY fi.created_at DESC
+     LIMIT 10`,
+    [report.category || "other", reportId],
+  );
+
   for (const item of items.rows) {
     await matchLostReportWithFoundItem(reportId, Number(item.id));
   }
@@ -307,7 +480,10 @@ export async function matchLostReportAgainstFoundItems(reportId: number): Promis
 
 export async function scanOpenLostReports(): Promise<void> {
   const reports = await pool.query(
-    "SELECT id FROM lost_reports WHERE status IN ('searching', 'pending') ORDER BY created_at ASC",
+    `SELECT id FROM lost_reports
+     WHERE status IN ('searching', 'pending')
+     ORDER BY created_at DESC
+     LIMIT 5`,
   );
   for (const report of reports.rows) {
     await matchLostReportAgainstFoundItems(Number(report.id));
