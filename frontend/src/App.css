@@ -209,9 +209,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  padding-bottom: max(4px, env(safe-area-inset-bottom, 0px));
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding: 0;
   z-index: 100;
 }
 
