@@ -197,8 +197,9 @@ body {
 
 /* Bottom Navigation Bar - Perfectly hugs iPhone Home Indicator with No Gaps */
 .mobile-bottom-nav {
-  position: absolute;
+  position: fixed;
   bottom: 0;
+  inset-block-end: 0;
   left: 0;
   right: 0;
   width: 100%;
@@ -216,6 +217,7 @@ body {
 
 @media (min-width: 640px) {
   .mobile-bottom-nav {
+    position: absolute;
     left: 0;
     right: 0;
     width: 100%;
