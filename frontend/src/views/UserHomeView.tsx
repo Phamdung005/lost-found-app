@@ -64,6 +64,13 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
     }
   };
 
+  const handleOpenAllOrdersKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onNavigateTab('profile');
+    }
+  };
+
   return (
     <div>
       {/* Short Greeting */}
@@ -181,7 +188,15 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {claims.map((claim) => (
-              <div key={`claim-${claim.id}`} className="card-clean" style={{ margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div
+                key={`claim-${claim.id}`}
+                className="card-clean"
+                role="button"
+                tabIndex={0}
+                onClick={() => onNavigateTab('profile')}
+                onKeyDown={handleOpenAllOrdersKeyDown}
+                style={{ margin: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{ width: 44, height: 44, borderRadius: 10, background: '#ecfdf5', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
                     <KeyOutlined />
@@ -200,12 +215,17 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
               <div
                 key={report.id}
                 className="card-clean"
+                role="button"
+                tabIndex={0}
+                onClick={() => onNavigateTab('profile')}
+                onKeyDown={handleOpenAllOrdersKeyDown}
                 style={{
                   margin: 0,
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   transition: 'background 0.15s',
+                  cursor: 'pointer',
                 }}
               >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
