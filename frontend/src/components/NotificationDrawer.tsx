@@ -186,8 +186,8 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
         </div>
       }
       placement="right"
-      width={window.innerWidth > 480 ? 420 : '90%'}
-      className="notification-drawer"
+      width="min(420px, 100vw)"
+      rootClassName="notification-drawer"
       onClose={onClose}
       open={open}
       extra={
