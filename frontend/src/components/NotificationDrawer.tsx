@@ -187,6 +187,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
       }
       placement="right"
       width={window.innerWidth > 480 ? 420 : '90%'}
+      className="notification-drawer"
       onClose={onClose}
       open={open}
       extra={
@@ -203,7 +204,12 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
           </Button>
         )
       }
-      bodyStyle={{ padding: '8px 12px', background: '#f8fafc' }}
+      bodyStyle={{
+        padding: '10px 12px',
+        background: '#f8fafc',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      }}
     >
       {loading && notifications.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
