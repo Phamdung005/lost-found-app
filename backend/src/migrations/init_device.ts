@@ -13,6 +13,7 @@ export async function runDeviceMigration() {
       ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50),
       ADD COLUMN IF NOT EXISTS firmware_version VARCHAR(50) DEFAULT 'v1.0.0',
       ADD COLUMN IF NOT EXISTS wifi_rssi INT,
+      ADD COLUMN IF NOT EXISTS device_connection_status VARCHAR(20) DEFAULT 'unknown',
       ADD COLUMN IF NOT EXISTS is_simulation_mode BOOLEAN DEFAULT false;
     `);
 

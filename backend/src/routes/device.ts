@@ -54,6 +54,7 @@ router.post("/heartbeat", authenticateDevice, async (req: Request, res: Response
            ip_address = $1, 
            wifi_rssi = $2, 
            firmware_version = COALESCE($3, firmware_version),
+           device_connection_status = 'online',
            status = 'online'
        WHERE id = $4`,
       [ip, wifi_rssi || null, firmware_version || null, lockerId]
@@ -320,10 +321,10 @@ router.get("/status", async (_req: Request, res: Response): Promise<void> => {
   try {
     const lockerRes = await pool.query(`
       SELECT 
-        id, locker_code, location, status, last_heartbeat, 
+        id, locker_code, location, status, device_connection_status, last_heartbeat,
         ip_address, firmware_version, wifi_rssi, is_simulation_mode,
         CASE 
-          WHEN last_heartbeat IS NOT NULL AND last_heartbeat > (now() - INTERVAL '60 seconds') THEN true
+          WHEN last_heartbeat IS NOT NULL AND last_heartbeat > (now() - INTERVAL '35 seconds') THEN true
           ELSE false
         END AS is_online
       FROM lockers

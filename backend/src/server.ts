@@ -127,7 +127,9 @@ app.get("/api/lockers", async (_req, res) => {
         id,
         locker_code,
         location,
-        status
+        status,
+        device_connection_status,
+        last_heartbeat
       FROM lockers
       ORDER BY id
     `);
@@ -721,6 +723,47 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`Smart Locker API running at http://localhost:${PORT}`);
+    const monitorDevices = async () => {
+      try {
+        await pool.query(`
+          UPDATE lockers
+          SET device_connection_status = CASE
+            WHEN last_heartbeat IS NULL
+              OR last_heartbeat < now() - INTERVAL '35 seconds' THEN 'offline'
+            ELSE 'online'
+          END,
+          updated_at = now()
+        `);
+        await pool.query(`
+          UPDATE locker_slots s
+          SET device_status = CASE
+            WHEN l.last_heartbeat IS NULL
+              OR l.last_heartbeat < now() - INTERVAL '35 seconds' THEN 'offline'
+            ELSE 'online'
+          END,
+          updated_at = now()
+          FROM lockers l
+          WHERE s.locker_id = l.id
+        `);
+        const staleCommands = await pool.query(`
+          UPDATE locker_commands
+          SET status = 'failed',
+              result_message = 'Thiết bị không xác nhận lệnh trong thời gian cho phép',
+              executed_at = COALESCE(executed_at, now()),
+              updated_at = now()
+          WHERE status = 'executing'
+            AND updated_at < now() - INTERVAL '90 seconds'
+          RETURNING id
+        `);
+        if (staleCommands.rowCount) {
+          console.warn(`[DEVICE] Marked ${staleCommands.rowCount} stale command(s) as failed.`);
+        }
+      } catch (error) {
+        console.error('Device health monitor failed:', error);
+      }
+    };
+    void monitorDevices();
+    setInterval(() => { void monitorDevices(); }, 30_000);
     const scan = () => {
       void scanOpenLostReports().catch((error) => {
         console.error("Scheduled lost report matching failed:", error);
