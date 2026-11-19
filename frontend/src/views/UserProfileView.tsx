@@ -332,6 +332,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   Nơi mất: {report.lost_location} · Gửi ngày {new Date(report.created_at).toLocaleDateString('vi-VN')}
                 </div>
                 {report.description && <div style={{ fontSize: 12, marginTop: 6 }}>Đặc điểm: {report.description}</div>}
+                {report.status === 'searching' && !report.last_match_at && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#2563eb', marginTop: 6 }}>
+                    <Spin size="small" /> AI đang tìm và đối chiếu món đồ...
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: '#2563eb', marginTop: 6 }}>
                   AI đã kiểm tra {report.match_count || 0} ứng viên
                   {report.best_match_score !== null && report.best_match_score !== undefined
