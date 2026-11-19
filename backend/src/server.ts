@@ -846,7 +846,7 @@ async function startServer() {
               executed_at = COALESCE(executed_at, now()),
               updated_at = now()
           WHERE status = 'executing'
-            AND updated_at < now() - INTERVAL '90 seconds'
+            AND updated_at < now() - INTERVAL '150 seconds'
           RETURNING id
         `);
         if (staleCommands.rowCount) {

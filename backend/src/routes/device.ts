@@ -702,30 +702,13 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
     // Đánh dấu yêu cầu đã hoàn tất
     await client.query(
       `UPDATE found_item_claims 
-       SET status = 'claimed', claimed_at = now(), updated_at = now()
+       SET status = 'redeeming', updated_at = now()
        WHERE id = $1`,
       [claim.id]
     );
 
     // Cập nhật món đồ thành đã trao trả
-    await client.query(
-      `UPDATE found_items
-       SET status = 'returned', updated_at = now()
-       WHERE id = $1`,
-      [claim.found_item_id]
-    );
-    await closeWorkflowsForReturnedItem(client, Number(claim.found_item_id), Number(claim.id));
-
     // Cập nhật ngăn tủ về trạng thái trống
-    if (slotId) {
-      await client.query(
-        `UPDATE locker_slots
-         SET occupancy_status = 'empty', status = 'empty', door_status = 'open', updated_at = now()
-         WHERE id = $1`,
-        [slotId]
-      );
-    }
-
     // Reset bộ đếm sai khi người dùng nhập đúng
     otpFailTracker.delete(trackerKey);
 
@@ -735,8 +718,8 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
     if (claim.user_id) {
       await createNotification({
         userId: claim.user_id,
-        title: "Mở tủ tại Keypad thành công",
-        message: `Mã OTP [${inputCode}] đã được nhập tại bàn phím tủ. Ngăn ${slotCode} đã mở để bạn lấy lại "${claim.item_name}".`,
+        title: "Đang mở tủ tại Keypad",
+        message: `Mã OTP [${inputCode}] đã được xác nhận. Ngăn ${slotCode} đang chờ chu kỳ cửa hoàn tất để trao trả "${claim.item_name}".`,
         type: "success",
       });
     }
@@ -744,8 +727,8 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
     // Thông báo cho Admin
     await createNotification({
       role: "admin",
-      title: `Mở tủ bằng Keypad thành công (${slotCode})`,
-      message: `Người dùng vừa nhập OTP [${inputCode}] tại bàn phím phần cứng. Ngăn ${slotCode} đã mở và trao trả món đồ "${claim.item_name}".`,
+      title: `Đang mở ngăn bằng Keypad (${slotCode})`,
+      message: `OTP [${inputCode}] đã được xác nhận. Chỉ đánh dấu trao trả sau khi cảm biến ghi nhận chu kỳ cửa hoàn tất cho "${claim.item_name}".`,
       type: "locker",
     });
 
@@ -755,12 +738,99 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
       data: {
         slot_code: slotCode,
         item_name: claim.item_name,
+        claim_id: claim.id,
       },
     });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Device verify OTP error:", error);
     res.status(500).json({ success: false, message: "Lỗi hệ thống khi kiểm tra OTP" });
+  } finally {
+    client.release();
+  }
+});
+
+// Keypad báo hoàn tất sau khi firmware đã quan sát chu kỳ cảm biến open -> closed.
+router.post("/keypad/complete", authenticateDevice, async (req: Request, res: Response): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const claimId = Number(req.body?.claim_id);
+    const success = req.body?.status === "success";
+    const doorStatus = typeof req.body?.door_status === "string" ? req.body.door_status : "open";
+    const lockerId = Number((req as any).device?.id);
+    if (!Number.isInteger(claimId) || claimId <= 0) {
+      res.status(400).json({ success: false, message: "claim_id không hợp lệ" });
+      return;
+    }
+
+    await client.query("BEGIN");
+    const claimResult = await client.query(
+      `SELECT c.id, c.user_id, c.found_item_id, c.status, f.item_name,
+              COALESCE(f.slot_id, f.locker_slot_id) AS slot_id,
+              s.slot_code, s.locker_id
+       FROM found_item_claims c
+       JOIN found_items f ON f.id = c.found_item_id
+       LEFT JOIN locker_slots s ON s.id = COALESCE(f.slot_id, f.locker_slot_id)
+       WHERE c.id = $1 AND s.locker_id = $2
+       FOR UPDATE OF c, f`,
+      [claimId, lockerId],
+    );
+    if (claimResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ success: false, message: "Không tìm thấy yêu cầu keypad" });
+      return;
+    }
+
+    const claim = claimResult.rows[0];
+    if (claim.status !== "redeeming") {
+      await client.query("ROLLBACK");
+      res.status(409).json({ success: false, message: `Yêu cầu đang ở trạng thái ${claim.status}` });
+      return;
+    }
+
+    if (success) {
+      await client.query(
+        `UPDATE found_item_claims
+         SET status = 'claimed', claimed_at = now(), claim_code = NULL, updated_at = now()
+         WHERE id = $1`,
+        [claimId],
+      );
+      await client.query(
+        `UPDATE found_items SET status = 'returned', updated_at = now() WHERE id = $1`,
+        [claim.found_item_id],
+      );
+      await closeWorkflowsForReturnedItem(client, Number(claim.found_item_id), claimId);
+      if (claim.slot_id) {
+        await client.query(
+          `UPDATE locker_slots
+           SET occupancy_status = 'empty', status = 'empty', door_status = $1, updated_at = now()
+           WHERE id = $2`,
+          [doorStatus, claim.slot_id],
+        );
+      }
+    } else {
+      await client.query(
+        `UPDATE found_item_claims SET status = 'approved', updated_at = now() WHERE id = $1`,
+        [claimId],
+      );
+    }
+    await client.query("COMMIT");
+
+    if (claim.user_id) {
+      await createNotification({
+        userId: claim.user_id,
+        title: success ? "Đã nhận lại đồ thành công" : "Chưa hoàn tất nhận đồ",
+        message: success
+          ? `Món đồ “${claim.item_name}” đã được trao trả sau khi cửa hoàn tất chu kỳ cảm biến.`
+          : `Ngăn ${claim.slot_code || "tủ"} chưa hoàn tất chu kỳ cửa. Mã nhận đồ vẫn còn hiệu lực.`,
+        type: success ? "success" : "warning",
+      });
+    }
+    res.json({ success: true, message: success ? "Đã ghi nhận trao trả" : "Đã khôi phục yêu cầu nhận đồ" });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Keypad completion failed:", error);
+    res.status(500).json({ success: false, message: "Không thể ghi nhận hoàn tất keypad" });
   } finally {
     client.release();
   }
