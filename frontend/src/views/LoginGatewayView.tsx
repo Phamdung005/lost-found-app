@@ -136,7 +136,7 @@ export const LoginGatewayView: React.FC<LoginGatewayViewProps> = ({ onOpenPwaGui
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 8 }}>
-          ⚡ Bấm để đăng nhập nhanh tài khoản demo:
+          Bấm để đăng nhập nhanh tài khoản demo:
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Button

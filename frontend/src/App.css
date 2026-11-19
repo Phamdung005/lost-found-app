@@ -116,7 +116,9 @@ body {
   }
 
   .auth-gateway-shell {
-    max-width: 620px;
+    width: 520px;
+    max-width: calc(100% - 32px);
+    flex: 0 0 520px;
   }
 }
 
