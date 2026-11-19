@@ -123,7 +123,7 @@ export function App() {
   if (!isAuthenticated) {
     return (
       <AntApp>
-        <div className="mobile-app-container" style={{ minHeight: '100dvh', justifyContent: 'center' }}>
+        <div className="mobile-app-container auth-gateway-shell" style={{ minHeight: '100dvh', justifyContent: 'center' }}>
           <LoginGatewayView onOpenPwaGuide={() => setPwaGuideOpen(true)} />
           <PWAInstallGuideModal
             open={pwaGuideOpen}

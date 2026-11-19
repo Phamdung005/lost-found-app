@@ -92,6 +92,10 @@ body {
   box-shadow: none;
 }
 
+.auth-gateway-shell {
+  width: 100%;
+}
+
 /* On Desktop / iPad, render a clean framed preview */
 @media (min-width: 640px) {
   #root {
@@ -109,6 +113,10 @@ body {
     border: 8px solid #0f172a;
     box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.25);
     overflow: hidden;
+  }
+
+  .auth-gateway-shell {
+    max-width: 620px;
   }
 }
 
