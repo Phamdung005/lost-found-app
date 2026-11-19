@@ -185,7 +185,6 @@ export function App() {
             >
               {user?.full_name ? user.full_name[0].toUpperCase() : 'U'}
             </div>
-
             <Button
               type="text"
               shape="circle"
