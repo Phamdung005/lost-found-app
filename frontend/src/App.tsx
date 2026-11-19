@@ -159,10 +159,9 @@ export function App() {
               icon={<MenuOutlined style={{ fontSize: 20 }} />}
               aria-label="Mở menu"
               onClick={() => setMenuOpen(true)}
-              style={{ order: 2 }}
             />
 
-            <Badge count={unreadNotifCount} size="small" offset={[-2, 4]} style={{ order: 1 }}>
+            <Badge count={unreadNotifCount} size="small" offset={[-2, 4]}>
               <Button
                 type="text"
                 shape="circle"
@@ -186,7 +185,6 @@ export function App() {
                 fontWeight: 700,
                 fontSize: 14,
                 cursor: 'pointer',
-                order: 3,
               }}
               onClick={() => setCurrentTab(isAdmin ? 'admin_account' : 'profile')}
               title="Tài khoản"
