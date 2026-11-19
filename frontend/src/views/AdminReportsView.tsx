@@ -518,13 +518,19 @@ export const AdminReportsView: React.FC = () => {
                   </div>
 
                   <div
-                    style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                      gap: 8,
+                      borderTop: '1px solid #f1f5f9',
+                      paddingTop: 8,
+                    }}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <Button
                       size="small"
                       onClick={() => void handleViewMatches(report)}
-                      style={{ borderRadius: 6 }}
+                      style={{ borderRadius: 6, width: '100%' }}
                     >
                       Xem phân tích AI
                     </Button>
@@ -533,7 +539,7 @@ export const AdminReportsView: React.FC = () => {
                         size="small"
                         icon={<CheckOutlined />}
                         onClick={() => handleUpdateLostReportStatus(report.id, 'found')}
-                        style={{ borderRadius: 6, color: '#16a34a', borderColor: '#86efac' }}
+                        style={{ borderRadius: 6, width: '100%', color: '#16a34a', borderColor: '#86efac' }}
                       >
                         Đã tìm thấy
                       </Button>
@@ -542,7 +548,7 @@ export const AdminReportsView: React.FC = () => {
                       <Button
                         size="small"
                         onClick={() => handleUpdateLostReportStatus(report.id, 'closed')}
-                        style={{ borderRadius: 6 }}
+                        style={{ borderRadius: 6, width: '100%' }}
                       >
                         Đóng báo cáo
                       </Button>
@@ -558,7 +564,7 @@ export const AdminReportsView: React.FC = () => {
                       <Button
                         size="small"
                         danger
-                        style={{ borderRadius: 6 }}
+                        style={{ borderRadius: 6, width: '100%' }}
                       >
                         Xóa
                       </Button>
