@@ -8,7 +8,9 @@ import {
   Space,
   Alert,
   Spin,
-  Empty
+  Empty,
+  Modal,
+  Image,
 } from 'antd';
 import {
   UserOutlined,
@@ -46,6 +48,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [redeemingId, setRedeemingId] = useState<number | null>(null);
   const [inputOtp, setInputOtp] = useState('');
   const [submittingRedeem, setSubmittingRedeem] = useState(false);
+  const [selectedLostReport, setSelectedLostReport] = useState<any | null>(null);
 
   // Fetch my claims
   const fetchMyClaims = async (isSilent = false) => {
@@ -310,7 +313,15 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {lostReports.map((report) => (
-              <div key={report.id} className="card-clean" style={{ margin: 0 }}>
+              <div
+                key={report.id}
+                className="card-clean"
+                style={{ margin: 0, cursor: 'pointer' }}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedLostReport(report)}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedLostReport(report); }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <Text strong>{report.item_name}</Text>
                   <Tag color={report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : 'processing'}>
@@ -353,6 +364,36 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           </div>
         )}
       </div>
+
+      <Modal
+        open={Boolean(selectedLostReport)}
+        onCancel={() => setSelectedLostReport(null)}
+        footer={null}
+        title={selectedLostReport?.item_name || 'Chi tiết báo mất'}
+        width={560}
+      >
+        {selectedLostReport && (
+          <div>
+            {(selectedLostReport.image_urls || []).length > 0 && (
+              <Image.PreviewGroup>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {selectedLostReport.image_urls.map((url: string, index: number) => (
+                    <Image key={`${selectedLostReport.id}-image-${index}`} src={url} width={96} height={96} alt="Ảnh báo mất" style={{ objectFit: 'cover', borderRadius: 8 }} />
+                  ))}
+                </div>
+              </Image.PreviewGroup>
+            )}
+            <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
+              <div><Text type="secondary">Danh mục:</Text> {selectedLostReport.category || 'other'}</div>
+              <div><Text type="secondary">Nơi mất:</Text> {selectedLostReport.lost_location}</div>
+              {selectedLostReport.lost_at && <div><Text type="secondary">Thời gian mất:</Text> {new Date(selectedLostReport.lost_at).toLocaleString('vi-VN')}</div>}
+              <div><Text type="secondary">Ngày gửi:</Text> {new Date(selectedLostReport.created_at).toLocaleString('vi-VN')}</div>
+              {selectedLostReport.description && <div><Text type="secondary">Đặc điểm:</Text> {selectedLostReport.description}</div>}
+              <div><Text type="secondary">Đối chiếu:</Text> {selectedLostReport.match_count || 0} ứng viên</div>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Claims List */}
       <div>

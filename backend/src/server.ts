@@ -28,6 +28,11 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
+// Dashboard and PWA clients poll frequently; never serve stale API responses.
+app.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  next();
+});
 
 // Routes
 app.use("/api/auth", authRouter);
@@ -560,7 +565,7 @@ app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
     const reports = await Promise.all(result.rows.map(async (report) => ({
       ...report,
       image_object_keys: undefined,
-      image_urls: [],
+      image_urls: await createObjectReadUrls(report.image_object_keys),
     })));
     res.json({ success: true, data: reports });
   } catch (error) {
