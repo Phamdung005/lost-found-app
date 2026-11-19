@@ -14,6 +14,9 @@ interface FoundItem {
   found_location: string;
   found_at: string;
   status: string;
+  stored_at?: string | null;
+  storage_expires_at?: string | null;
+  storage_elapsed_seconds?: number | null;
   tracking_code?: string | null;
   slot_code?: string | null;
   locker_code?: string | null;
@@ -27,6 +30,7 @@ export const AdminFoundItemsView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
+  const [now, setNow] = useState(() => Date.now());
 
   const loadItems = async () => {
     if (!token) return;
@@ -56,6 +60,19 @@ export const AdminFoundItemsView: React.FC = () => {
     return () => clearInterval(timer);
   }, [token, status]);
 
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDuration = (seconds: number) => {
+    const safeSeconds = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const secs = safeSeconds % 60;
+    return `${hours}g ${String(minutes).padStart(2, '0')}p ${String(secs).padStart(2, '0')}s`;
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -82,6 +99,7 @@ export const AdminFoundItemsView: React.FC = () => {
             void loadItems();
           }}
           options={[
+            { value: 'archived', label: 'Lưu trữ quá 24h' },
             { value: 'all', label: 'Tất cả' },
             { value: 'in_locker', label: 'Trong tủ' },
             { value: 'reported', label: 'Chưa gửi tủ' },
@@ -121,6 +139,12 @@ export const AdminFoundItemsView: React.FC = () => {
                 Mã theo dõi: <strong>{item.tracking_code || 'N/A'}</strong>
                 {item.locker_code && <> · Tủ: <strong>{item.locker_code}</strong></>}
               </div>
+              {item.stored_at && item.status !== 'returned' && (
+                <div style={{ fontSize: 12, color: item.status === 'archived' ? '#b45309' : '#2563eb', marginTop: 6 }}>
+                  Thời gian trong tủ: <strong>{formatDuration((now - new Date(item.stored_at).getTime()) / 1000)}</strong>
+                  {item.status !== 'archived' && <> · Hạn lưu trữ: {new Date(item.storage_expires_at || new Date(item.stored_at).getTime() + 86400000).toLocaleString('vi-VN')}</>}
+                </div>
+              )}
               <Alert
                 type="warning"
                 showIcon

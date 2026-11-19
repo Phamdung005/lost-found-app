@@ -728,6 +728,13 @@ async function startServer() {
     const monitorDevices = async () => {
       try {
         await pool.query(`
+          UPDATE found_items
+          SET status = 'archived', updated_at = now()
+          WHERE status IN ('in_locker', 'stored')
+            AND stored_at IS NOT NULL
+            AND stored_at < now() - INTERVAL '24 hours'
+        `);
+        await pool.query(`
           UPDATE lockers
           SET device_connection_status = CASE
             WHEN last_heartbeat IS NULL

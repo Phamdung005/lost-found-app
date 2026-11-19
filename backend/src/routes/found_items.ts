@@ -236,6 +236,13 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 
     const insertResult = await client.query(insertQuery, insertParams);
 
+    if (finalSlotId && insertResult.rows[0]?.id) {
+      await client.query(
+        `UPDATE found_items SET stored_at = now(), updated_at = now() WHERE id = $1`,
+        [insertResult.rows[0].id],
+      );
+    }
+
     await client.query("COMMIT");
 
     const createdItem = insertResult.rows[0];
@@ -347,7 +354,14 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
         f.category,
         f.found_location,
         f.found_at,
-        CASE WHEN f.status = 'stored' THEN 'in_locker' ELSE f.status END as status,
+        CASE
+          WHEN f.status IN ('in_locker', 'stored') AND f.stored_at <= now() - INTERVAL '24 hours' THEN 'archived'
+          WHEN f.status = 'stored' THEN 'in_locker'
+          ELSE f.status
+        END as status,
+        f.stored_at,
+        CASE WHEN f.stored_at IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM (now() - f.stored_at)))::int END as storage_elapsed_seconds,
+        CASE WHEN f.stored_at IS NULL THEN NULL ELSE (f.stored_at + INTERVAL '24 hours') END as storage_expires_at,
         f.tracking_code,
         f.image_url,
         f.image_object_keys,
@@ -451,7 +465,14 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         f.category,
         f.found_location,
         f.found_at,
-        CASE WHEN f.status = 'stored' THEN 'in_locker' ELSE f.status END as status,
+        CASE
+          WHEN f.status IN ('in_locker', 'stored') AND f.stored_at <= now() - INTERVAL '24 hours' THEN 'archived'
+          WHEN f.status = 'stored' THEN 'in_locker'
+          ELSE f.status
+        END as status,
+        f.stored_at,
+        CASE WHEN f.stored_at IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM (now() - f.stored_at)))::int END as storage_elapsed_seconds,
+        CASE WHEN f.stored_at IS NULL THEN NULL ELSE (f.stored_at + INTERVAL '24 hours') END as storage_expires_at,
         f.tracking_code,
         f.image_url,
         f.image_object_keys,

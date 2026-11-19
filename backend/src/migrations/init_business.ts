@@ -131,6 +131,7 @@ export async function runBusinessMigration() {
         tracking_code VARCHAR(50) UNIQUE,
         status VARCHAR(50) NOT NULL DEFAULT 'reported',
         locker_slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
+        stored_at TIMESTAMPTZ,
         created_by INT REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now()
@@ -143,8 +144,12 @@ export async function runBusinessMigration() {
       ADD COLUMN IF NOT EXISTS slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS locker_slot_id INT REFERENCES locker_slots(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS image_object_key TEXT,
-      ADD COLUMN IF NOT EXISTS image_object_keys JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ADD COLUMN IF NOT EXISTS image_object_keys JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS stored_at TIMESTAMPTZ;
       UPDATE found_items SET status = 'in_locker' WHERE status = 'stored';
+      UPDATE found_items
+      SET stored_at = COALESCE(stored_at, updated_at, found_at, now())
+      WHERE stored_at IS NULL AND status IN ('in_locker', 'stored', 'archived');
     `);
 
     // 4. Tạo bảng lost_reports
