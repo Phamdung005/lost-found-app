@@ -40,7 +40,9 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
     { key: 'admin_account', label: 'Tài khoản', icon: <UserOutlined className="nav-icon" /> },
   ];
 
-  const tabs = isAdmin ? adminTabs : userTabs;
+  const tabs = isAdmin
+    ? adminTabs.filter((tab) => ['admin_overview', 'admin_reports', 'admin_account'].includes(tab.key))
+    : userTabs;
 
   return (
     <nav className="mobile-bottom-nav" role="navigation" aria-label="Thanh điều hướng dưới">

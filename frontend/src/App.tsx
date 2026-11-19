@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { App as AntApp, Button, Space, Spin, Badge, Dropdown } from 'antd';
+import { App as AntApp, Button, Space, Spin, Badge, Drawer, Menu } from 'antd';
 import {
   SafetyCertificateOutlined,
   AppleOutlined,
@@ -45,6 +45,7 @@ export function App() {
   const [pwaGuideOpen, setPwaGuideOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const quickMenuItems = [
     { key: 'pwa', label: 'Cài đặt PWA', icon: <AppleOutlined /> },
@@ -59,9 +60,11 @@ export function App() {
   const handleQuickMenuClick = ({ key }: { key: string }) => {
     if (key === 'pwa') {
       setPwaGuideOpen(true);
+      setMenuOpen(false);
       return;
     }
     setCurrentTab(key);
+    setMenuOpen(false);
   };
 
   // Sync tab if user role changes
@@ -150,14 +153,14 @@ export function App() {
           </div>
 
           <Space size={10}>
-            <Dropdown
-              menu={{ items: quickMenuItems, selectedKeys: [currentTab], onClick: handleQuickMenuClick }}
-              trigger={['click']}
-              placement="bottomRight"
-              styles={{ root: { order: 2 } }}
-            >
-              <Button type="text" shape="circle" icon={<MenuOutlined style={{ fontSize: 20 }} />} aria-label="Mở menu" />
-            </Dropdown>
+            <Button
+              type="text"
+              shape="circle"
+              icon={<MenuOutlined style={{ fontSize: 20 }} />}
+              aria-label="Mở menu"
+              onClick={() => setMenuOpen(true)}
+              style={{ order: 2 }}
+            />
 
             <Badge count={unreadNotifCount} size="small" offset={[-2, 4]} style={{ order: 1 }}>
               <Button
@@ -192,6 +195,23 @@ export function App() {
             </div>
           </Space>
         </header>
+
+        <Drawer
+          title={isAdmin ? 'Menu quản trị' : 'Menu FindBox'}
+          placement="right"
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          width="50vw"
+          styles={{ body: { padding: 8 }, header: { padding: '16px 20px' } }}
+        >
+          <Menu
+            mode="inline"
+            items={quickMenuItems}
+            selectedKeys={[currentTab]}
+            onClick={handleQuickMenuClick}
+            style={{ border: 0 }}
+          />
+        </Drawer>
 
         {/* Main Content Area */}
         <main className="mobile-content-area">
