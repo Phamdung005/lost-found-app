@@ -419,10 +419,12 @@ app.get("/api/lost-reports", async (req, res) => {
     let query = `
       SELECT lr.id, lr.item_name, lr.category, lr.description, lr.lost_location,
              lr.lost_at, lr.reporter_contact, lr.status, lr.user_id, lr.created_at,
+             u.full_name AS reporter_name, u.email AS reporter_email, u.phone AS reporter_phone,
              lr.image_object_keys,
              COUNT(lrm.id)::int AS match_count,
              MAX(lrm.score) AS best_match_score
       FROM lost_reports lr
+      LEFT JOIN users u ON u.id = lr.user_id
       LEFT JOIN lost_report_matches lrm ON lrm.lost_report_id = lr.id
       WHERE 1=1
     `;
@@ -438,7 +440,7 @@ app.get("/api/lost-reports", async (req, res) => {
       query += ` AND lr.category = $${params.length}`;
     }
 
-    query += ` GROUP BY lr.id ORDER BY lr.created_at DESC`;
+    query += ` GROUP BY lr.id, u.full_name, u.email, u.phone ORDER BY lr.created_at DESC`;
 
     const canViewImages = isAdminRequest(req);
     const result = await pool.query(query, params);

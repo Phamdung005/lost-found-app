@@ -435,6 +435,9 @@ export const AdminReportsView: React.FC = () => {
                         {report.item_name}
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b' }}>
+                        Danh mục: {report.category || 'other'}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
                         Địa điểm mất: {report.lost_location}
                       </div>
                     </div>
@@ -466,6 +469,17 @@ export const AdminReportsView: React.FC = () => {
                   <div style={{ fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                     <span>Liên hệ: <strong style={{ color: '#0f172a' }}>{report.reporter_contact || 'Không để lại'}</strong></span>
                     <span>Báo lúc: {new Date(report.created_at).toLocaleDateString('vi-VN')}</span>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
+                    {report.lost_at && <>Thời gian mất: <strong>{new Date(report.lost_at).toLocaleString('vi-VN')}</strong> · </>}
+                    Thời gian gửi: <strong>{new Date(report.created_at).toLocaleString('vi-VN')}</strong>
+                    {(report.reporter_name || report.reporter_email || report.reporter_phone) && (
+                      <><br />Người báo: <strong style={{ color: '#0f172a' }}>{report.reporter_name || 'Không rõ'}</strong>
+                        {report.reporter_email && <> · {report.reporter_email}</>}
+                        {!report.reporter_contact && report.reporter_phone && <> · {report.reporter_phone}</>}
+                      </>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
