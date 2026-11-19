@@ -9,6 +9,7 @@ import {
   Modal,
   Input,
   message,
+  Image,
 } from 'antd';
 import {
   CheckOutlined,
@@ -132,6 +133,22 @@ export const AdminClaimsDrawer: React.FC<AdminClaimsDrawerProps> = ({
       key: 'comparison',
       render: (_: any, record: any) => (
         <div style={{ maxWidth: 300 }}>
+          {((record.item_image_urls || []).length > 0 || (record.proof_image_urls || []).length > 0) && (
+            <Image.PreviewGroup>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {[...(record.item_image_urls || []), ...(record.proof_image_urls || [])].map((url: string, index: number) => (
+                  <Image
+                    key={`${record.id}-preview-${index}`}
+                    src={url}
+                    alt={`Ảnh đối chiếu ${index + 1}`}
+                    width={58}
+                    height={58}
+                    style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }}
+                  />
+                ))}
+              </div>
+            </Image.PreviewGroup>
+          )}
           <div style={{ marginBottom: 4 }}>
             <Text type="secondary" style={{ fontSize: 11 }}>
               Bằng chứng người dùng khai:

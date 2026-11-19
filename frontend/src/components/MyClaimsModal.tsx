@@ -11,6 +11,7 @@ import {
   message,
   Alert,
   Divider,
+  Image,
 } from 'antd';
 import {
   KeyOutlined,
@@ -161,6 +162,10 @@ export const MyClaimsModal: React.FC<MyClaimsModalProps> = ({ open, onCancel, on
         renderItem={(claim) => {
           const isApproved = claim.status === 'approved';
           const isRedeemingThis = redeemClaimId === claim.id;
+          const previewImages = [
+            ...(claim.item_image_urls || []),
+            ...(claim.proof_image_urls || []),
+          ];
 
           return (
             <Card style={{ marginBottom: 12, borderColor: isApproved ? '#22c55e' : '#e2e8f0' }}>
@@ -176,6 +181,23 @@ export const MyClaimsModal: React.FC<MyClaimsModalProps> = ({ open, onCancel, on
                 </div>
                 <div>{getStatusTag(claim.status)}</div>
               </div>
+
+              {previewImages.length > 0 && (
+                <Image.PreviewGroup>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    {previewImages.map((url: string, index: number) => (
+                      <Image
+                        key={`${claim.id}-preview-${index}`}
+                        src={url}
+                        alt={`Ảnh trong yêu cầu nhận đồ ${index + 1}`}
+                        width={78}
+                        height={78}
+                        style={{ objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }}
+                      />
+                    ))}
+                  </div>
+                </Image.PreviewGroup>
+              )}
 
               <div style={{ margin: '10px 0', fontSize: 13 }}>
                 <Text type="secondary">Bằng chứng bạn đã cung cấp: </Text>

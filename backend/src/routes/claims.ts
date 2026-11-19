@@ -132,6 +132,7 @@ router.get("/my", authenticateToken, async (req: AuthenticatedRequest, res: Resp
          c.found_item_id,
          c.proof_description,
          c.proof_contact,
+         c.proof_image_object_keys,
          c.status,
          c.claim_code,
          c.code_expires_at,
@@ -143,6 +144,7 @@ router.get("/my", authenticateToken, async (req: AuthenticatedRequest, res: Resp
          f.category,
          f.found_location,
          f.image_url,
+         f.image_object_keys,
          s.id as slot_id,
          s.slot_code,
          l.id as locker_id,
@@ -160,7 +162,9 @@ router.get("/my", authenticateToken, async (req: AuthenticatedRequest, res: Resp
     const claims = await Promise.all(result.rows.map(async (claim) => ({
       ...claim,
       proof_image_urls: await createObjectReadUrls(claim.proof_image_object_keys),
+      item_image_urls: await createObjectReadUrls(claim.image_object_keys),
       proof_image_object_keys: undefined,
+      image_object_keys: undefined,
     })));
 
     res.json({
