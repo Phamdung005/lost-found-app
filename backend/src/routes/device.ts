@@ -5,6 +5,7 @@ import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
+import { closeWorkflowsForReturnedItem } from "../utils/item-lifecycle.js";
 
 const router = Router();
 
@@ -239,13 +240,17 @@ router.post("/commands/:id/ack", authenticateDevice, async (req: Request, res: R
 
     const claimId = Number(commandParameters.claim_id);
     if (isSuccess && commandParameters.release_item === true && command.slot_id) {
-      await client.query(
+      const returnedItems = await client.query(
         `UPDATE found_items
          SET status = 'returned', updated_at = now()
          WHERE (slot_id = $1 OR locker_slot_id = $1)
-           AND status IN ('in_locker', 'stored', 'reported')`,
+           AND status IN ('in_locker', 'stored', 'reported')
+         RETURNING id`,
         [command.slot_id]
       );
+      for (const item of returnedItems.rows) {
+        await closeWorkflowsForReturnedItem(client, Number(item.id));
+      }
       await client.query(
         `UPDATE found_item_claims
          SET status = 'claimed', claimed_at = now(), updated_at = now()
@@ -270,12 +275,16 @@ router.post("/commands/:id/ack", authenticateDevice, async (req: Request, res: R
            WHERE id = $1 AND status = 'redeeming'`,
           [claimId]
         );
-        await client.query(
+        const returnedItem = await client.query(
           `UPDATE found_items
            SET status = 'returned', updated_at = now()
-           WHERE id = (SELECT found_item_id FROM found_item_claims WHERE id = $1)`,
+           WHERE id = (SELECT found_item_id FROM found_item_claims WHERE id = $1)
+           RETURNING id`,
           [claimId]
         );
+        if (returnedItem.rows[0]) {
+          await closeWorkflowsForReturnedItem(client, Number(returnedItem.rows[0].id), claimId);
+        }
         await client.query(
           `UPDATE locker_slots
            SET occupancy_status = 'empty', status = 'empty', updated_at = now()
@@ -705,6 +714,7 @@ router.post("/verify-otp", authenticateDevice, async (req: Request, res: Respons
        WHERE id = $1`,
       [claim.found_item_id]
     );
+    await closeWorkflowsForReturnedItem(client, Number(claim.found_item_id), Number(claim.id));
 
     // Cập nhật ngăn tủ về trạng thái trống
     if (slotId) {

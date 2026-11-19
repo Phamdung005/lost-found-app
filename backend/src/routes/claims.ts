@@ -8,6 +8,7 @@ import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { logAudit } from "../utils/audit.js";
 import { createNotification } from "../utils/notifications.js";
 import { createObjectReadUrls } from "../services/object-storage.js";
+import { closeWorkflowsForReturnedItem } from "../utils/item-lifecycle.js";
 
 const router = Router();
 
