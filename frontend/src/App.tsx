@@ -139,29 +139,21 @@ export function App() {
     <AntApp>
       <div className="mobile-app-container">
         {/* Top App Bar */}
-        <header className="mobile-top-bar">
-          <div className="top-bar-brand">
-            <div className="brand-badge-icon">
-              {isAdmin ? <ThunderboltOutlined /> : <SafetyCertificateOutlined />}
+        <div className="top-bar-shell">
+          <header className="mobile-top-bar">
+            <div className="top-bar-brand">
+              <div className="brand-badge-icon">
+                {isAdmin ? <ThunderboltOutlined /> : <SafetyCertificateOutlined />}
+              </div>
+              <div>
+                <span className="brand-text-name">FindBox</span>
+                <span className="brand-role-tag" style={{ marginLeft: 6 }}>
+                  {isAdmin ? 'Quản trị' : 'Smart Locker'}
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="brand-text-name">FindBox</span>
-              <span className="brand-role-tag" style={{ marginLeft: 6 }}>
-                {isAdmin ? 'Quản trị' : 'Smart Locker'}
-              </span>
-            </div>
-          </div>
 
-          <Space size={10}>
-            <Button
-              type="text"
-              shape="circle"
-              icon={<MenuOutlined style={{ fontSize: 20 }} />}
-              aria-label="Mở menu"
-              onClick={() => setMenuOpen(true)}
-              style={{ order: 3 }}
-            />
-
+            <Space size={10}>
             <Badge count={unreadNotifCount} size="small" offset={[-2, 4]} style={{ order: 1 }}>
               <Button
                 type="text"
@@ -193,8 +185,18 @@ export function App() {
             >
               {user?.full_name ? user.full_name[0].toUpperCase() : 'U'}
             </div>
-          </Space>
-        </header>
+            </Space>
+          </header>
+
+          <Button
+            className="external-menu-button"
+            type="text"
+            shape="circle"
+            icon={<MenuOutlined style={{ fontSize: 20 }} />}
+            aria-label="Mở menu"
+            onClick={() => setMenuOpen(true)}
+          />
+        </div>
 
         <Drawer
           title={isAdmin ? 'Menu quản trị' : 'Menu FindBox'}

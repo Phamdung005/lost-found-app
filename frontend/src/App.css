@@ -86,8 +86,7 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: hidden;
+  overflow: hidden;
   margin: 0;
   border: none;
   box-shadow: none;
@@ -146,6 +145,44 @@ body {
   padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* The menu is intentionally outside the header actions, attached to the
+   right edge of the app frame. Notification and avatar stay inside. */
+.top-bar-shell {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 40;
+}
+
+.top-bar-shell .mobile-top-bar {
+  z-index: 1;
+}
+
+.external-menu-button {
+  position: fixed !important;
+  z-index: 2;
+  top: calc(env(safe-area-inset-top, 0px) + 28px);
+  right: calc(50% - 262px);
+  width: 40px;
+  height: 40px;
+  color: var(--text-main) !important;
+  background: #fff !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 639px) {
+  /* On a phone there is no room beyond the viewport, so keep the same
+     separated menu control at the far right of the header. */
+  .external-menu-button {
+    top: calc(env(safe-area-inset-top, 0px) + 28px);
+    right: 8px;
+  }
+
+  .top-bar-shell .mobile-top-bar {
+    padding-right: 62px;
+  }
 }
 
 .top-bar-brand {
