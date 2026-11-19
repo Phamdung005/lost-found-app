@@ -46,12 +46,23 @@ export function App() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
-  const quickMenuItems = (isAdmin ? [
+  const quickMenuItems = [
+    { key: 'pwa', label: 'Cài đặt PWA', icon: <AppleOutlined /> },
+    ...((isAdmin ? [
     ['admin_overview', 'Tổng quan'], ['admin_reports', 'Báo cáo'], ['admin_items', 'Kho đồ'],
     ['admin_users', 'Thành viên'], ['admin_lockers', 'Tủ IoT'], ['admin_account', 'Tài khoản'],
   ] : [
     ['home', 'Trang chủ'], ['search', 'Tìm đồ'], ['report', 'Báo đồ'], ['profile', 'Tài khoản'],
-  ]).map(([key, label]) => ({ key, label }));
+  ]).map(([key, label]) => ({ key, label }))),
+  ];
+
+  const handleQuickMenuClick = ({ key }: { key: string }) => {
+    if (key === 'pwa') {
+      setPwaGuideOpen(true);
+      return;
+    }
+    setCurrentTab(key);
+  };
 
   // Sync tab if user role changes
   React.useEffect(() => {
@@ -140,23 +151,15 @@ export function App() {
 
           <Space size={10}>
             <Dropdown
-              menu={{ items: quickMenuItems, selectedKeys: [currentTab], onClick: ({ key }) => setCurrentTab(key) }}
+              menu={{ items: quickMenuItems, selectedKeys: [currentTab], onClick: handleQuickMenuClick }}
               trigger={['click']}
               placement="bottomRight"
+              styles={{ root: { order: 2 } }}
             >
-              <Button type="text" shape="circle" icon={<MenuOutlined style={{ fontSize: 18 }} />} aria-label="Mở menu" />
+              <Button type="text" shape="circle" icon={<MenuOutlined style={{ fontSize: 20 }} />} aria-label="Mở menu" />
             </Dropdown>
-            <Button
-              type="text"
-              size="small"
-              icon={<AppleOutlined />}
-              onClick={() => setPwaGuideOpen(true)}
-              style={{ color: '#2563eb', fontWeight: 600, fontSize: 12 }}
-            >
-              PWA
-            </Button>
 
-            <Badge count={unreadNotifCount} size="small" offset={[-2, 4]}>
+            <Badge count={unreadNotifCount} size="small" offset={[-2, 4]} style={{ order: 1 }}>
               <Button
                 type="text"
                 shape="circle"
@@ -180,6 +183,7 @@ export function App() {
                 fontWeight: 700,
                 fontSize: 14,
                 cursor: 'pointer',
+                order: 3,
               }}
               onClick={() => setCurrentTab(isAdmin ? 'admin_account' : 'profile')}
               title="Tài khoản"
