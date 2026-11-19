@@ -132,7 +132,13 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         await client.query(
           `INSERT INTO locker_commands (locker_id, slot_id, command_type, status, parameters)
            VALUES ($1, $2, 'OPEN_SLOT', 'pending', $3)`,
-          [targetLockerId, finalSlotId, JSON.stringify({ duration_ms: 10000, reason: "DEPOSIT_ITEM" })]
+          [targetLockerId, finalSlotId, JSON.stringify({
+            duration_ms: 120000,
+            open_timeout_ms: 120000,
+            door_cycle_required: true,
+            auto_close: false,
+            reason: "DEPOSIT_ITEM",
+          })]
         );
       }
 

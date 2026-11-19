@@ -424,7 +424,12 @@ router.post("/commands", authenticateToken, requireAdmin, async (req: Authentica
       slot.id,
       command_type || "OPEN_SLOT",
       JSON.stringify({ 
-        duration_ms: duration_ms || 5000, 
+        // Firmware must keep the latch released until the reed sensor reports
+        // open and then closed again. duration_ms is only a safety timeout.
+        duration_ms: Math.max(Number(duration_ms) || 120000, 120000),
+        door_cycle_required: true,
+        auto_close: false,
+        open_timeout_ms: 120000,
         servo_pin: slot.servo_pin,
         sensor_pin: slot.sensor_pin,
         release_item: !!release_item

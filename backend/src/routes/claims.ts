@@ -543,7 +543,10 @@ router.post("/redeem", authenticateToken, async (req: AuthenticatedRequest, res:
             claim.locker_id,
             claim.slot_id,
             JSON.stringify({
-              duration_ms: 10000,
+              duration_ms: 120000,
+              open_timeout_ms: 120000,
+              door_cycle_required: true,
+              auto_close: false,
               reason: "USER_REDEEM_OTP",
               claim_id: claim.id,
               release_item: true,
