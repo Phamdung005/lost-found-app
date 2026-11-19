@@ -41,6 +41,7 @@ export const AdminReportsView: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportMatches, setReportMatches] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [confirmingMatchId, setConfirmingMatchId] = useState<number | null>(null);
 
   const fetchClaims = async () => {
     if (!token) return;
@@ -204,6 +205,27 @@ export const AdminReportsView: React.FC = () => {
       message.error(error.message || 'Không thể tải kết quả AI');
     } finally {
       setLoadingMatches(false);
+    }
+  };
+
+  const handleConfirmMatch = async (match: any) => {
+    if (!selectedReport || !token) return;
+    setConfirmingMatchId(match.found_item_id);
+    try {
+      const res = await fetch(`${API_BASE}/lost-reports/${selectedReport.id}/confirm-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ found_item_id: match.found_item_id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Không thể xác nhận món đồ');
+      message.success(data.message);
+      setMatchModalOpen(false);
+      await fetchLostReports();
+    } catch (error: any) {
+      message.error(error.message || 'Không thể xác nhận món đồ');
+    } finally {
+      setConfirmingMatchId(null);
     }
   };
 
@@ -578,6 +600,17 @@ export const AdminReportsView: React.FC = () => {
                 <div style={{ marginTop: 10, fontSize: 13, color: '#475569' }}>
                   <strong>Lý do:</strong> {match.rationale}
                 </div>
+                <Button
+                  type="primary"
+                  block
+                  size="small"
+                  loading={confirmingMatchId === match.found_item_id}
+                  disabled={match.found_item_status === 'returned' || selectedReport.status === 'found'}
+                  onClick={() => void handleConfirmMatch(match)}
+                  style={{ marginTop: 10, borderRadius: 7 }}
+                >
+                  Chọn món này và gửi mã cho người dùng
+                </Button>
               </div>
             ))}
           </div>

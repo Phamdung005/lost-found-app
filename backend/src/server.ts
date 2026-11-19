@@ -120,6 +120,86 @@ app.get("/api/lost-reports/:id/matches", authenticateToken, async (req, res) => 
   }
 });
 
+app.post("/api/lost-reports/:id/confirm-match", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  const client = await pool.connect();
+  try {
+    const reportId = Number(req.params.id);
+    const foundItemId = Number(req.body?.found_item_id);
+    if (!Number.isInteger(reportId) || !Number.isInteger(foundItemId)) {
+      res.status(400).json({ success: false, message: "Báo mất hoặc món đồ không hợp lệ" });
+      return;
+    }
+
+    await client.query("BEGIN");
+    const reportResult = await client.query(
+      `SELECT id, user_id, item_name FROM lost_reports WHERE id = $1 FOR UPDATE`,
+      [reportId],
+    );
+    const itemResult = await client.query(
+      `SELECT f.id, f.item_name, f.tracking_code, f.status, f.found_location,
+              s.slot_code, l.locker_code
+       FROM found_items f
+       LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
+       LEFT JOIN lockers l ON s.locker_id = l.id
+       WHERE f.id = $1 FOR UPDATE`,
+      [foundItemId],
+    );
+
+    if (reportResult.rows.length === 0 || itemResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ success: false, message: "Không tìm thấy báo mất hoặc món đồ" });
+      return;
+    }
+    const report = reportResult.rows[0];
+    const item = itemResult.rows[0];
+    if (item.status === "returned") {
+      await client.query("ROLLBACK");
+      res.status(400).json({ success: false, message: "Món đồ này đã được trao trả" });
+      return;
+    }
+
+    await client.query(
+      `INSERT INTO lost_report_matches
+         (lost_report_id, found_item_id, score, identifier_score, text_score, image_score, context_score, rationale, provider, model, status)
+       VALUES ($1, $2, 1, 1, 1, 1, 1, $3, 'admin', 'manual-confirmation', 'confirmed')
+       ON CONFLICT (lost_report_id, found_item_id) DO UPDATE SET
+         score = 1, identifier_score = 1, text_score = 1, image_score = 1,
+         context_score = 1, rationale = EXCLUDED.rationale, provider = 'admin',
+         model = 'manual-confirmation', status = 'confirmed', created_at = now()`,
+      [reportId, foundItemId, `Admin đã xác nhận thủ công món đồ ${item.tracking_code || `#${foundItemId}`} khớp với đơn báo mất.`],
+    );
+    await client.query(
+      `UPDATE lost_reports SET status = 'found', updated_at = now() WHERE id = $1`,
+      [reportId],
+    );
+    await client.query("COMMIT");
+
+    if (report.user_id) {
+      const location = item.locker_code
+        ? `Tủ ${item.locker_code}${item.slot_code ? `, ngăn ${item.slot_code}` : ""}`
+        : item.found_location;
+      await createNotification({
+        userId: report.user_id,
+        title: "✅ Đã xác nhận tìm thấy đồ của bạn",
+        message: `Admin đã xác nhận món đồ “${item.item_name}”. Mã đồ: ${item.tracking_code || "N/A"}. Vị trí: ${location}. Bạn có thể dùng mã này để gửi yêu cầu nhận lại đồ.`,
+        type: "success",
+      });
+    }
+    await logAudit(req.user?.id || null, "LOST_REPORT_MANUALLY_MATCHED", {
+      report_id: reportId,
+      found_item_id: foundItemId,
+      tracking_code: item.tracking_code,
+    });
+    res.json({ success: true, message: "Đã xác nhận món đồ và gửi mã cho người dùng", data: item });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Confirm lost report match failed:", error);
+    res.status(500).json({ success: false, message: "Không thể xác nhận món đồ" });
+  } finally {
+    client.release();
+  }
+});
+
 app.get("/api/lockers", async (_req, res) => {
   try {
     const result = await pool.query(`
