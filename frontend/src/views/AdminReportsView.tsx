@@ -493,6 +493,11 @@ export const AdminReportsView: React.FC = () => {
                     <span>Báo lúc: {new Date(report.created_at).toLocaleDateString('vi-VN')}</span>
                   </div>
 
+                  {report.status === 'searching' && (report.match_count || 0) === 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#2563eb', fontSize: 12, marginBottom: 8 }}>
+                      <Spin size="small" /> AI đang tìm và đối chiếu món đồ...
+                    </div>
+                  )}
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
                     {report.lost_at && <>Thời gian mất: <strong>{new Date(report.lost_at).toLocaleString('vi-VN')}</strong> · </>}
                     Thời gian gửi: <strong>{new Date(report.created_at).toLocaleString('vi-VN')}</strong>

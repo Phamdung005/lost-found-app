@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { App as AntApp, Button, Space, Spin, Badge } from 'antd';
+import { App as AntApp, Button, Space, Spin, Badge, Dropdown } from 'antd';
 import {
   SafetyCertificateOutlined,
   AppleOutlined,
   ThunderboltOutlined,
   BellOutlined,
+  MenuOutlined,
 } from '@ant-design/icons';
 import { useAuth } from './context/AuthContext';
 import { BottomNavBar } from './components/BottomNavBar';
@@ -44,6 +45,13 @@ export function App() {
   const [pwaGuideOpen, setPwaGuideOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  const quickMenuItems = (isAdmin ? [
+    ['admin_overview', 'Tổng quan'], ['admin_reports', 'Báo cáo'], ['admin_items', 'Kho đồ'],
+    ['admin_users', 'Thành viên'], ['admin_lockers', 'Tủ IoT'], ['admin_account', 'Tài khoản'],
+  ] : [
+    ['home', 'Trang chủ'], ['search', 'Tìm đồ'], ['report', 'Báo đồ'], ['profile', 'Tài khoản'],
+  ]).map(([key, label]) => ({ key, label }));
 
   // Sync tab if user role changes
   React.useEffect(() => {
@@ -131,6 +139,13 @@ export function App() {
           </div>
 
           <Space size={10}>
+            <Dropdown
+              menu={{ items: quickMenuItems, selectedKeys: [currentTab], onClick: ({ key }) => setCurrentTab(key) }}
+              trigger={['click']}
+              placement="bottomRight"
+            >
+              <Button type="text" shape="circle" icon={<MenuOutlined style={{ fontSize: 18 }} />} aria-label="Mở menu" />
+            </Dropdown>
             <Button
               type="text"
               size="small"
