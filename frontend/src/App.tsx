@@ -185,17 +185,18 @@ export function App() {
             >
               {user?.full_name ? user.full_name[0].toUpperCase() : 'U'}
             </div>
+
+            <Button
+              type="text"
+              shape="circle"
+              icon={<MenuOutlined style={{ fontSize: 20 }} />}
+              aria-label="Mở menu"
+              onClick={() => setMenuOpen(true)}
+              title="Menu"
+              style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            />
             </Space>
           </header>
-
-          <Button
-            className="external-menu-button"
-            type="text"
-            shape="circle"
-            icon={<MenuOutlined style={{ fontSize: 20 }} />}
-            aria-label="Mở menu"
-            onClick={() => setMenuOpen(true)}
-          />
         </div>
 
         <Drawer
