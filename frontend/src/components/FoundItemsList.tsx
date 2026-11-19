@@ -141,7 +141,8 @@ export const FoundItemsList: React.FC<FoundItemsListProps> = ({ onSuccessClaim }
       ) : (
         <Row gutter={[16, 16]}>
           {items.map((item) => {
-            const isStored = item.status === 'stored';
+            const isStored = ['stored', 'in_locker', 'archived'].includes(item.status);
+            const isArchived = item.status === 'archived';
             const isReturned = item.status === 'returned';
 
             return (
@@ -175,8 +176,10 @@ export const FoundItemsList: React.FC<FoundItemsListProps> = ({ onSuccessClaim }
                     </div>
 
                     <div style={{ marginTop: 4 }}>
-                      <Tag color={isStored ? 'success' : isReturned ? 'default' : 'orange'}>
-                        {isStored
+                      <Tag color={isStored ? (isArchived ? 'warning' : 'success') : isReturned ? 'default' : 'orange'}>
+                        {isArchived
+                          ? 'Đã lưu trữ quá 24 giờ'
+                          : isStored
                           ? 'Đang lưu giữ trong tủ FindBox'
                           : isReturned
                           ? 'Đã trao trả chủ nhân'
