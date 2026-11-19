@@ -86,7 +86,7 @@ export const LoginGatewayView: React.FC<LoginGatewayViewProps> = ({ onOpenPwaGui
       style={{
         padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 20px calc(env(safe-area-inset-bottom, 0px) + 24px)',
         width: '100%',
-        maxWidth: 420,
+        maxWidth: 'none',
         margin: '0 auto',
         minHeight: '100dvh',
         display: 'flex',
