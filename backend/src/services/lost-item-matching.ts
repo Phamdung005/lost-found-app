@@ -473,6 +473,18 @@ export async function matchLostReportAgainstFoundItems(reportId: number): Promis
     [report.category || "other", reportId],
   );
 
+  // Không có món nào để đối chiếu thì không gọi AI và không hiển thị trạng thái
+  // "đang tìm" giả. Giữ report ở pending để tự động thử lại khi có món mới.
+  if (items.rows.length === 0) {
+    await pool.query(
+      `UPDATE lost_reports
+       SET status = 'pending', updated_at = now()
+       WHERE id = $1 AND status IN ('searching', 'pending')`,
+      [reportId],
+    );
+    return;
+  }
+
   for (const item of items.rows) {
     await matchLostReportWithFoundItem(reportId, Number(item.id));
   }
