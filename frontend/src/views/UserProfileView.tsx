@@ -324,8 +324,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <Text strong>{report.item_name}</Text>
-                  <Tag color={report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : 'processing'}>
-                    {report.status === 'found' ? 'Đã tìm thấy ứng viên' : report.status === 'closed' ? 'Đã đóng' : 'Đang theo dõi'}
+                  <Tag color={report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : report.status === 'pending' ? 'warning' : 'processing'}>
+                    {report.status === 'found' ? 'Đã tìm thấy ứng viên' : report.status === 'closed' ? 'Đã đóng' : report.status === 'pending' ? 'Đang chờ món phù hợp' : 'Đang theo dõi'}
                   </Tag>
                 </div>
                 <div style={{ color: '#64748b', fontSize: 12, marginTop: 5 }}>
@@ -335,6 +335,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 {report.status === 'searching' && !report.last_match_at && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#2563eb', marginTop: 6 }}>
                     <Spin size="small" /> AI đang tìm và đối chiếu món đồ...
+                  </div>
+                )}
+                {report.status === 'pending' && (report.match_count || 0) === 0 && (
+                  <div style={{ fontSize: 12, color: '#b45309', marginTop: 6 }}>
+                    Chưa có món nào trong kho để đối chiếu. Hệ thống sẽ tự kiểm tra khi có món mới.
                   </div>
                 )}
                 <div style={{ fontSize: 12, color: '#2563eb', marginTop: 6 }}>

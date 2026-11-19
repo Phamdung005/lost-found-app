@@ -474,12 +474,14 @@ export const AdminReportsView: React.FC = () => {
                     <Tag 
                       color={
                         report.status === 'found' ? 'success' :
-                        report.status === 'closed' ? 'default' : 'processing'
+                        report.status === 'closed' ? 'default' :
+                        report.status === 'pending' ? 'warning' : 'processing'
                       } 
                       style={{ margin: 0, borderRadius: 6 }}
                     >
                       {report.status === 'found' ? 'Đã tìm thấy' :
-                       report.status === 'closed' ? 'Đã đóng' : 'Đang tìm kiếm'}
+                       report.status === 'closed' ? 'Đã đóng' :
+                       report.status === 'pending' ? 'Chờ có món để đối chiếu' : 'Đang tìm kiếm'}
                     </Tag>
                   </div>
 
@@ -504,6 +506,11 @@ export const AdminReportsView: React.FC = () => {
                   {report.status === 'searching' && (report.match_count || 0) === 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#2563eb', fontSize: 12, marginBottom: 8 }}>
                       <Spin size="small" /> AI đang tìm và đối chiếu món đồ...
+                    </div>
+                  )}
+                  {report.status === 'pending' && (report.match_count || 0) === 0 && (
+                    <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>
+                      Chưa có món nào trong kho phù hợp để AI đối chiếu. Hệ thống sẽ tự kiểm tra khi có món mới.
                     </div>
                   )}
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>

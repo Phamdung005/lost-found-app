@@ -262,7 +262,7 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
                     }
                     style={{ margin: 0, borderRadius: 6 }}
                   >
-                    {report.status === 'found' ? 'Đã tìm thấy' : report.status === 'closed' ? 'Đã đóng' : 'Đang tìm kiếm'}
+                    {report.status === 'found' ? 'Đã tìm thấy' : report.status === 'closed' ? 'Đã đóng' : report.status === 'pending' ? 'Đang chờ món phù hợp' : 'Đang tìm kiếm'}
                   </Tag>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
                     {report.match_count || 0} ứng viên
