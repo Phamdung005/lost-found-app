@@ -396,6 +396,39 @@ export const AdminReportsView: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {lostReports.map((report) => (
                 <div key={report.id} className="card-clean" style={{ margin: 0 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    {Array.isArray(report.image_urls) && report.image_urls.length > 0 ? (
+                      <Image.PreviewGroup>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {report.image_urls.map((imageUrl: string, index: number) => (
+                            <Image
+                              key={`${report.id}-image-${index}`}
+                              src={imageUrl}
+                              alt={`Ảnh món đồ báo mất ${index + 1}`}
+                              width={96}
+                              height={96}
+                              fallback="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364758b' font-size='12'%3ELỗi ảnh%3C/text%3E%3C/svg%3E"
+                              style={{ objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }}
+                            />
+                          ))}
+                        </div>
+                      </Image.PreviewGroup>
+                    ) : (
+                      <div style={{
+                        height: 72,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#94a3b8',
+                        background: '#f8fafc',
+                        border: '1px dashed #cbd5e1',
+                        borderRadius: 8,
+                        fontSize: 13,
+                      }}>
+                        Chưa có ảnh món đồ
+                      </div>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>

@@ -23,6 +23,12 @@ export async function runBusinessMigration() {
       );
     `);
 
+    // Bổ sung cột cho các database đã có bảng lockers từ migration cũ
+    await client.query(`
+      ALTER TABLE lockers
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    `);
+
     // Tạo tủ mẫu L-001 nếu chưa có
     await client.query(`
       INSERT INTO lockers (locker_code, location, status, device_token)
