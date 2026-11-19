@@ -417,7 +417,15 @@ export const AdminReportsView: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {lostReports.map((report) => (
-                <div key={report.id} className="card-clean" style={{ margin: 0 }}>
+                <div
+                  key={report.id}
+                  className="card-clean"
+                  style={{ margin: 0, cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => void handleViewMatches(report)}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') void handleViewMatches(report); }}
+                >
                   <div style={{ marginBottom: 12 }}>
                     {Array.isArray(report.image_urls) && report.image_urls.length > 0 ? (
                       <Image.PreviewGroup>
@@ -509,7 +517,10 @@ export const AdminReportsView: React.FC = () => {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                  <div
+                    style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <Button
                       size="small"
                       onClick={() => void handleViewMatches(report)}

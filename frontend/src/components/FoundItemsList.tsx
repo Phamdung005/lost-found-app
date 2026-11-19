@@ -10,6 +10,8 @@ import {
   Typography,
   Space,
   Empty,
+  Modal,
+  Image,
 } from 'antd';
 import {
   SearchOutlined,
@@ -37,6 +39,7 @@ export const FoundItemsList: React.FC<FoundItemsListProps> = ({ onSuccessClaim }
   const [category, setCategory] = useState('all');
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [claimModalOpen, setClaimModalOpen] = useState(false);
+  const [detailItem, setDetailItem] = useState<any | null>(null);
   const { token } = useAuth();
 
   const loadItems = async () => {
@@ -149,6 +152,7 @@ export const FoundItemsList: React.FC<FoundItemsListProps> = ({ onSuccessClaim }
               <Col xs={24} sm={12} lg={8} key={item.id}>
                 <Card
                   hoverable
+                  onClick={() => setDetailItem(item)}
                   style={{
                     height: '100%',
                     display: 'flex',
@@ -214,7 +218,8 @@ export const FoundItemsList: React.FC<FoundItemsListProps> = ({ onSuccessClaim }
                         type="primary"
                         block
                         icon={<SafetyCertificateOutlined />}
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation();
                           setSelectedItem(item);
                           setClaimModalOpen(true);
                         }}
@@ -229,6 +234,34 @@ export const FoundItemsList: React.FC<FoundItemsListProps> = ({ onSuccessClaim }
           })}
         </Row>
       )}
+
+      <Modal
+        open={Boolean(detailItem)}
+        onCancel={() => setDetailItem(null)}
+        footer={null}
+        title={detailItem?.item_name || 'Chi tiết món đồ'}
+      >
+        {detailItem && (
+          <div>
+            {(detailItem.image_urls || []).length > 0 && (
+              <Image.PreviewGroup>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {detailItem.image_urls.map((url: string, index: number) => (
+                    <Image key={`${detailItem.id}-image-${index}`} src={url} width={100} height={100} alt="Ảnh món đồ" style={{ objectFit: 'cover', borderRadius: 8 }} />
+                  ))}
+                </div>
+              </Image.PreviewGroup>
+            )}
+            <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
+              <div><Text type="secondary">Danh mục:</Text> {getCategoryName(detailItem.category)}</div>
+              <div><Text type="secondary">Nơi nhặt:</Text> {detailItem.found_location}</div>
+              <div><Text type="secondary">Thời gian nhặt:</Text> {new Date(detailItem.found_at).toLocaleString('vi-VN')}</div>
+              {detailItem.tracking_code && <div><Text type="secondary">Mã theo dõi:</Text> <Text code>{detailItem.tracking_code}</Text></div>}
+              <div><Text type="secondary">Trạng thái:</Text> {detailItem.status === 'archived' ? 'Đã lưu trữ quá 24 giờ' : detailItem.status === 'returned' ? 'Đã trao trả' : 'Đang lưu giữ'}</div>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ClaimModal
         open={claimModalOpen}
