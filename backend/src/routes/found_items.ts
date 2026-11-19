@@ -378,6 +378,18 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
 
     const params: any[] = [];
 
+    // Người dùng chỉ được xem các món còn đang được hệ thống lưu giữ.
+    // Các món đã trao trả/claimed hoặc quá hạn lưu trữ chỉ dành cho Admin.
+    if (!isAdmin) {
+      query += `
+        AND f.status NOT IN ('returned', 'claimed')
+        AND NOT (
+          f.status IN ('in_locker', 'stored')
+          AND f.stored_at IS NOT NULL
+          AND f.stored_at <= now() - INTERVAL '24 hours'
+        )`;
+    }
+
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`);
       query += ` AND (
@@ -485,6 +497,13 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       LEFT JOIN locker_slots s ON f.slot_id = s.id
       LEFT JOIN lockers l ON s.locker_id = l.id
       WHERE f.id = $1
+        ${isAdmin ? '' : `
+        AND f.status NOT IN ('returned', 'claimed')
+        AND NOT (
+          f.status IN ('in_locker', 'stored')
+          AND f.stored_at IS NOT NULL
+          AND f.stored_at <= now() - INTERVAL '24 hours'
+        )`}
     `;
 
     const result = await pool.query(query, [id]);

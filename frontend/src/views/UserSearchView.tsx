@@ -80,8 +80,7 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
 
     const matchesStatus =
       filterStatus === 'all' ||
-      (filterStatus === 'in_locker' && (item.status === 'in_locker' || item.status === 'stored')) ||
-      (filterStatus === 'returned' && (item.status === 'returned' || item.status === 'claimed'));
+      (filterStatus === 'in_locker' && (item.status === 'in_locker' || item.status === 'stored'));
 
     return matchesSearch && matchesStatus;
   });
@@ -158,14 +157,6 @@ export const UserSearchView: React.FC<UserSearchViewProps> = ({
           style={{ borderRadius: 16, fontSize: 12 }}
         >
           Đang trong tủ ({items.filter((i) => i.status === 'in_locker' || i.status === 'stored').length})
-        </Button>
-        <Button
-          size="small"
-          type={filterStatus === 'returned' ? 'primary' : 'default'}
-          onClick={() => setFilterStatus('returned')}
-          style={{ borderRadius: 16, fontSize: 12 }}
-        >
-          Đã trao trả ({items.filter((i) => i.status === 'returned' || i.status === 'claimed').length})
         </Button>
       </div>
 
