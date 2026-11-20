@@ -85,7 +85,7 @@ export const AdminFoundItemsView: React.FC = () => {
             size="small"
             icon={<CopyOutlined />}
             onClick={async () => {
-              const publicUrl = `${window.location.origin}/?guest=found`;
+              const publicUrl = `${window.location.origin}/guest-found`;
               await navigator.clipboard.writeText(publicUrl);
               message.success('Đã sao chép link form công khai để tạo QR');
             }}

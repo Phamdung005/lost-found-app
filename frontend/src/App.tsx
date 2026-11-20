@@ -109,23 +109,25 @@ export function App() {
     setAuthModalOpen(true);
   };
 
+  const guestQuery = new URLSearchParams(window.location.search).get('guest');
+  const isGuestFoundForm = window.location.pathname === '/guest-found' || guestQuery === 'found';
+
+  if (isGuestFoundForm) {
+    return (
+      <AntApp>
+        <div className="mobile-app-container auth-gateway-shell" style={{ minHeight: '100dvh', justifyContent: 'center', alignItems: 'center', overflowY: 'auto' }}>
+          <GuestFoundReportView />
+        </div>
+      </AntApp>
+    );
+  }
+
   // 1. Loading state while verifying token on startup
   if (loading) {
     return (
       <AntApp>
         <div className="mobile-app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh' }}>
           <Spin size="large" tip="Đang khởi động FindBox..." />
-        </div>
-      </AntApp>
-    );
-  }
-
-  const isGuestFoundForm = new URLSearchParams(window.location.search).get('guest') === 'found';
-  if (isGuestFoundForm) {
-    return (
-      <AntApp>
-        <div className="mobile-app-container auth-gateway-shell" style={{ minHeight: '100dvh', justifyContent: 'center', alignItems: 'center', overflowY: 'auto' }}>
-          <GuestFoundReportView />
         </div>
       </AntApp>
     );
