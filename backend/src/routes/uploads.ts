@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import multer from "multer";
-import { authenticateToken } from "../middleware/auth.js";
 import { ensureObjectStorageBucket, uploadObject } from "../services/object-storage.js";
 
 const router = Router();
@@ -22,7 +21,6 @@ const upload = multer({
 
 router.post(
   "/images",
-  authenticateToken,
   async (req, res) => {
     upload.array("images", 3)(req, res, async (uploadError) => {
       if (uploadError) {

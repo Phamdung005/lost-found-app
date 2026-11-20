@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Alert, Button, Card, Form, Input, Result, Select, Typography, DatePicker, message } from 'antd';
-import { InboxOutlined, SendOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Card, Form, Input, Result, Select, Typography, DatePicker, message, Upload } from 'antd';
+import { InboxOutlined, SendOutlined, SafetyCertificateOutlined, PictureOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { API_BASE } from '../config/api';
+import type { RcFile } from 'antd/es/upload';
 
 const { Title, Text } = Typography;
 
@@ -10,10 +11,40 @@ export const GuestFoundReportView: React.FC = () => {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [successData, setSuccessData] = useState<any | null>(null);
+  const [emptySlots, setEmptySlots] = useState<any[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [images, setImages] = useState<RcFile[]>([]);
+
+  useEffect(() => {
+    const loadSlots = async () => {
+      setLoadingSlots(true);
+      try {
+        const response = await fetch(`${API_BASE}/lockers/L-001/slots`);
+        const data = await response.json();
+        if (data.success) {
+          setEmptySlots((data.data || []).filter((slot: any) =>
+            (slot.occupancy_status || slot.status || '').toLowerCase() === 'empty' && slot.hardware_enabled !== false,
+          ));
+        }
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+    void loadSlots();
+  }, []);
 
   const submit = async (values: any) => {
     setSubmitting(true);
     try {
+      let imageObjectKeys: string[] = [];
+      if (images.length > 0) {
+        const uploadBody = new FormData();
+        images.forEach((file) => uploadBody.append('images', file));
+        const uploadResponse = await fetch(`${API_BASE}/uploads/images`, { method: 'POST', body: uploadBody });
+        const uploadData = await uploadResponse.json();
+        if (!uploadResponse.ok || !uploadData.success) throw new Error(uploadData.message || 'Không thể tải ảnh lên');
+        imageObjectKeys = (uploadData.data || []).map((image: any) => image.object_key);
+      }
       const response = await fetch(`${API_BASE}/found-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -24,12 +55,16 @@ export const GuestFoundReportView: React.FC = () => {
           found_location: values.found_location,
           found_at: values.found_at?.toISOString() || new Date().toISOString(),
           finder_contact: values.finder_contact,
+          locker_code: 'L-001',
+          slot_code: values.slot_code,
+          image_object_keys: imageObjectKeys,
         }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Không thể gửi thông tin');
       setSuccessData(data.data);
       form.resetFields();
+      setImages([]);
     } catch (error: any) {
       message.error(error.message || 'Gửi thông tin thất bại');
     } finally {
@@ -58,14 +93,14 @@ export const GuestFoundReportView: React.FC = () => {
           <SafetyCertificateOutlined />
         </div>
         <Title level={3} style={{ margin: 0 }}>Báo nhặt được đồ</Title>
-        <Text type="secondary">Không cần đăng nhập. Hãy để lại thông tin để FindBox hỗ trợ tìm chủ nhân.</Text>
+        <Text type="secondary">Không cần đăng nhập. Điền thông tin, chọn ngăn trống và cất món đồ vào tủ.</Text>
       </div>
       <Alert
         showIcon
         type="info"
         icon={<InboxOutlined />}
         message="Đây là biểu mẫu công khai dành cho khách"
-        description="Biểu mẫu chỉ ghi nhận thông tin; không tự mở ngăn tủ hoặc yêu cầu quyền truy cập tài khoản."
+        description="Sau khi gửi, ngăn trống sẽ được mở để bạn cất món đồ. Hãy đóng cửa tủ sau khi hoàn tất."
         style={{ marginBottom: 16 }}
       />
       <Card>
@@ -86,6 +121,20 @@ export const GuestFoundReportView: React.FC = () => {
           <Form.Item name="found_location" label="Địa điểm nhặt được" rules={[{ required: true, message: 'Vui lòng nhập địa điểm' }]}>
             <Input size="large" placeholder="Ví dụ: sảnh thư viện, tầng 1" />
           </Form.Item>
+          <Form.Item
+            name="slot_code"
+            label="Chọn ngăn trống để cất đồ"
+            rules={[{ required: true, message: 'Vui lòng chọn ngăn trống' }]}
+            extra={emptySlots.length ? `Có ${emptySlots.length} ngăn trống sẵn sàng` : 'Hiện không có ngăn trống'}
+          >
+            <Select
+              size="large"
+              loading={loadingSlots}
+              disabled={emptySlots.length === 0}
+              placeholder="Chọn ngăn tủ L-001"
+              options={emptySlots.map((slot) => ({ value: slot.slot_code, label: `Ngăn ${slot.slot_code} (Trống)` }))}
+            />
+          </Form.Item>
           <Form.Item name="found_at" label="Thời gian nhặt được">
             <DatePicker showTime size="large" style={{ width: '100%' }} format="DD/MM/YYYY HH:mm" />
           </Form.Item>
@@ -95,8 +144,28 @@ export const GuestFoundReportView: React.FC = () => {
           <Form.Item name="finder_contact" label="Thông tin liên hệ (khuyến nghị)">
             <Input size="large" placeholder="Số điện thoại, email hoặc tên của bạn" />
           </Form.Item>
-          <Button type="primary" htmlType="submit" block size="large" loading={submitting} icon={<SendOutlined />}>
-            Gửi thông tin món đồ
+          <Form.Item label="Ảnh món đồ (không bắt buộc)" extra="Tối đa 3 ảnh, mỗi ảnh không quá 5 MB.">
+            <Upload
+              listType="picture-card"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              maxCount={3}
+              beforeUpload={(file) => {
+                if (file.size > 5 * 1024 * 1024) {
+                  message.error('Mỗi ảnh không được vượt quá 5 MB');
+                  return Upload.LIST_IGNORE;
+                }
+                setImages((current) => [...current, file].slice(0, 3));
+                return false;
+              }}
+              onRemove={(file) => setImages((current) => current.filter((item) => item.uid !== file.uid))}
+            >
+              <PictureOutlined />
+              <div style={{ marginTop: 8 }}>Chọn ảnh</div>
+            </Upload>
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block size="large" loading={submitting} disabled={emptySlots.length === 0} icon={<SendOutlined />}>
+            Mở ngăn và cất món đồ
           </Button>
         </Form>
       </Card>
