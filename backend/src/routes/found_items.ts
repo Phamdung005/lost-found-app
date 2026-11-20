@@ -39,6 +39,32 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       locker_code,
     } = req.body;
 
+    const requestAuthHeader = req.headers.authorization;
+    let authenticatedUser = false;
+    if (requestAuthHeader?.startsWith("Bearer ")) {
+      try {
+        const requestToken = requestAuthHeader.split(" ")[1];
+        if (!requestToken) throw new Error("Missing bearer token");
+        jwt.verify(
+          requestToken,
+          process.env.JWT_SECRET || "findbox_super_secret_jwt_key_2026_demo",
+        );
+        authenticatedUser = true;
+      } catch {
+        authenticatedUser = false;
+      }
+    }
+
+    // QR public chỉ được ghi nhận thông tin. Việc mở ngăn phải đi qua tài khoản
+    // đã đăng nhập để tránh khách tự gửi lệnh mở tủ bằng cách gọi API trực tiếp.
+    if ((slot_id || slot_code) && !authenticatedUser) {
+      res.status(401).json({
+        success: false,
+        message: "Vui lòng đăng nhập để gửi món đồ trực tiếp vào ngăn tủ",
+      });
+      return;
+    }
+
     if (!item_name || typeof item_name !== "string" || !item_name.trim()) {
       res.status(400).json({ success: false, message: "Tên đồ vật là bắt buộc" });
       return;

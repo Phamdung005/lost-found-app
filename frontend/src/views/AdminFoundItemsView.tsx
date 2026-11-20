@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Empty, Image, Input, Select, Spin, Tag, Typography } from 'antd';
-import { InboxOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { Alert, Button, Empty, Image, Input, Select, Spin, Tag, Typography, message } from 'antd';
+import { CopyOutlined, InboxOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { API_BASE } from '../config/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -80,7 +80,20 @@ export const AdminFoundItemsView: React.FC = () => {
           <Title level={4} style={{ margin: 0, fontWeight: 800 }}>Đồ vật lưu trữ</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>Danh sách các món đồ đã được tiếp nhận vào hệ thống.</Text>
         </div>
-        <ReloadOutlined spin={loading} onClick={() => void loadItems()} style={{ fontSize: 18, cursor: 'pointer' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Button
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={async () => {
+              const publicUrl = `${window.location.origin}/?guest=found`;
+              await navigator.clipboard.writeText(publicUrl);
+              message.success('Đã sao chép link form công khai để tạo QR');
+            }}
+          >
+            Link form khách
+          </Button>
+          <ReloadOutlined spin={loading} onClick={() => void loadItems()} style={{ fontSize: 18, cursor: 'pointer' }} />
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>

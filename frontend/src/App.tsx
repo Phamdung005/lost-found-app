@@ -23,6 +23,7 @@ import { AdminUsersView } from './views/AdminUsersView';
 import { AuthModal } from './components/AuthModal';
 import { ClaimModal } from './components/ClaimModal';
 import { PWAInstallGuideModal } from './components/PWAInstallGuideModal';
+import { GuestFoundReportView } from './views/GuestFoundReportView';
 import { NotificationDrawer } from './components/NotificationDrawer';
 import './App.css';
 
@@ -114,6 +115,17 @@ export function App() {
       <AntApp>
         <div className="mobile-app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh' }}>
           <Spin size="large" tip="Đang khởi động FindBox..." />
+        </div>
+      </AntApp>
+    );
+  }
+
+  const isGuestFoundForm = new URLSearchParams(window.location.search).get('guest') === 'found';
+  if (isGuestFoundForm) {
+    return (
+      <AntApp>
+        <div className="mobile-app-container auth-gateway-shell" style={{ minHeight: '100dvh', justifyContent: 'center', alignItems: 'center', overflowY: 'auto' }}>
+          <GuestFoundReportView />
         </div>
       </AntApp>
     );
