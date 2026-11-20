@@ -213,6 +213,7 @@ export function App() {
         </div>
 
         <Drawer
+          className="app-menu-drawer"
           title={isAdmin ? 'Menu quản trị' : 'Menu FindBox'}
           placement="right"
           open={menuOpen}
