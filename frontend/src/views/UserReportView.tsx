@@ -146,6 +146,7 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           item_name: values.item_name,
+          category: values.category || 'other',
           description: values.description,
           found_location: values.found_location,
           locker_code: 'L-001',
@@ -240,6 +241,21 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
               rules={[{ required: true, message: 'Vui lòng nhập tên đồ vật' }]}
             >
               <Input placeholder="Ví dụ: Ví da màu nâu, Chìa khóa xe..." size="large" />
+            </Form.Item>
+
+            <Form.Item
+              name="category"
+              label={<span style={{ fontWeight: 600 }}>Danh mục đồ vật</span>}
+              initialValue="other"
+            >
+              <Select size="large" options={[
+                { value: 'wallet', label: 'Ví tiền / Bóp' },
+                { value: 'electronics', label: 'Thiết bị điện tử' },
+                { value: 'keys', label: 'Chìa khóa / Thẻ' },
+                { value: 'documents', label: 'Giấy tờ' },
+                { value: 'clothing', label: 'Trang phục' },
+                { value: 'other', label: 'Đồ vật khác' },
+              ]} />
             </Form.Item>
 
             <Form.Item
@@ -338,6 +354,21 @@ export const UserReportView: React.FC<UserReportViewProps> = ({
               rules={[{ required: true, message: 'Vui lòng nhập tên đồ vật' }]}
             >
               <Input placeholder="Ví dụ: Thẻ sinh viên, Tai nghe Bluetooth..." size="large" />
+            </Form.Item>
+
+            <Form.Item
+              name="category"
+              label={<span style={{ fontWeight: 600 }}>Danh mục đồ vật</span>}
+              initialValue="other"
+            >
+              <Select size="large" options={[
+                { value: 'wallet', label: 'Ví tiền / Bóp' },
+                { value: 'electronics', label: 'Thiết bị điện tử' },
+                { value: 'keys', label: 'Chìa khóa / Thẻ' },
+                { value: 'documents', label: 'Giấy tờ' },
+                { value: 'clothing', label: 'Trang phục' },
+                { value: 'other', label: 'Đồ vật khác' },
+              ]} />
             </Form.Item>
 
             <Form.Item
