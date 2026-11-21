@@ -262,7 +262,7 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -273,7 +273,7 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
       });
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("Gemini phản hồi quá thời gian 15 giây");
+        throw new Error("Gemini phản hồi quá thời gian 30 giây");
       }
       throw error;
     } finally {
