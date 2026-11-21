@@ -115,6 +115,21 @@ export function evaluateHeuristicFilter(
     }
   }
 
+  // Tên món trùng hoàn toàn là tín hiệu đủ mạnh để tạo ứng viên ngay cả khi
+  // Gemini đang quá tải/không cấp quota. Admin vẫn là người xác nhận cuối.
+  const reportName = normalizeText(report.item_name).trim();
+  const itemName = normalizeText(item.item_name).trim();
+  if (reportName && itemName && reportName === itemName) {
+    return {
+      score: 0.86,
+      rationale: `Tên món trùng hoàn toàn: "${String(report.item_name).trim()}". Đã tạo ứng viên bằng luật dự phòng; admin cần xác nhận cuối.`,
+      identifierScore: 0,
+      textScore: 1,
+      imageScore: 0,
+      contextScore: reportCategory && reportCategory === itemCategory ? 1 : 0.5,
+    };
+  }
+
   // 3. Nếu cả 2 không có ảnh và tên món đồ không có từ khóa nào tương đồng
   const hasReportImage = Array.isArray(report.image_object_keys) && report.image_object_keys.length > 0;
   const hasItemImage = Array.isArray(item.image_object_keys) && item.image_object_keys.length > 0;
