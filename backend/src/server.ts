@@ -187,16 +187,27 @@ app.post("/api/lost-reports/:id/confirm-match", authenticateToken, requireAdmin,
       return;
     }
 
-    await client.query(
+    const existingMatch = await client.query(
+      "SELECT id FROM lost_report_matches WHERE lost_report_id = $1 AND found_item_id = $2 FOR UPDATE",
+      [reportId, foundItemId],
+    );
+    if (!existingMatch.rowCount) await client.query(
       `INSERT INTO lost_report_matches
          (lost_report_id, found_item_id, score, identifier_score, text_score, image_score, context_score, rationale, provider, model, status)
        VALUES ($1, $2, 1, 1, 1, 1, 1, $3, 'admin', 'manual-confirmation', 'confirmed')
-       ON CONFLICT (lost_report_id, found_item_id) DO UPDATE SET
-         score = 1, identifier_score = 1, text_score = 1, image_score = 1,
-         context_score = 1, rationale = EXCLUDED.rationale, provider = 'admin',
-         model = 'manual-confirmation', status = 'confirmed', created_at = now()`,
+       `,
       [reportId, foundItemId, `Admin đã xác nhận thủ công món đồ ${item.tracking_code || `#${foundItemId}`} khớp với đơn báo mất.`],
     );
+    if (existingMatch.rowCount) {
+      await client.query(
+        `UPDATE lost_report_matches
+         SET score = 1, identifier_score = 1, text_score = 1, image_score = 1,
+             context_score = 1, rationale = $3, provider = 'admin',
+             model = 'manual-confirmation', status = 'confirmed', created_at = now()
+         WHERE lost_report_id = $1 AND found_item_id = $2`,
+        [reportId, foundItemId, `Admin đã xác nhận thủ công món đồ ${item.tracking_code || `#${foundItemId}`} khớp với đơn báo mất.`],
+      );
+    }
     await client.query(
       `UPDATE lost_reports SET status = 'found', updated_at = now() WHERE id = $1`,
       [reportId],
@@ -221,7 +232,7 @@ app.post("/api/lost-reports/:id/confirm-match", authenticateToken, requireAdmin,
     });
     res.json({ success: true, message: "Đã xác nhận món đồ và gửi mã cho người dùng", data: item });
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => undefined);
     console.error("Confirm lost report match failed:", error);
     res.status(500).json({ success: false, message: "Không thể xác nhận món đồ" });
   } finally {
