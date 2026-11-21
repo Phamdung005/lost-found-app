@@ -125,6 +125,30 @@ app.get("/api/lost-reports/:id/matches", authenticateToken, async (req, res) => 
   }
 });
 
+app.get("/api/lost-reports/:id/ai-logs", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const reportId = Number(req.params.id);
+    if (!Number.isInteger(reportId)) {
+      res.status(400).json({ success: false, message: "Mã báo mất không hợp lệ" });
+      return;
+    }
+
+    const result = await pool.query(
+      `SELECT id, action, details, created_at
+       FROM audit_logs
+       WHERE action IN ('LOST_ITEM_MATCH_STARTED', 'LOST_ITEM_MATCH_FAILED', 'LOST_ITEM_MATCHED', 'LOST_ITEM_MATCH_NOTIFIED')
+         AND (details->>'lost_report_id')::int = $1
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [reportId],
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Get lost report AI logs failed:", error);
+    res.status(500).json({ success: false, message: "Không thể lấy log đối chiếu AI" });
+  }
+});
+
 app.post("/api/lost-reports/:id/confirm-match", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   const client = await pool.connect();
   try {

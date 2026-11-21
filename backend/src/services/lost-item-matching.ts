@@ -13,6 +13,21 @@ interface GeminiMatchResult {
   contextScore: number;
 }
 
+const DEFAULT_GEMINI_TIMEOUT_MS = 10_000;
+const MATCH_FAILURE_COOLDOWN_MS = 10 * 60_000;
+const recentMatchFailures = new Map<string, number>();
+
+function getGeminiTimeoutMs(): number {
+  const configured = Number(process.env.GEMINI_TIMEOUT_MS || DEFAULT_GEMINI_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 3_000 && configured <= 30_000
+    ? configured
+    : DEFAULT_GEMINI_TIMEOUT_MS;
+}
+
+function getMatchFailureKey(reportId: number, foundItemId: number): string {
+  return `${reportId}:${foundItemId}`;
+}
+
 function boundedScore(value: unknown): number {
   const score = Number(value);
   if (!Number.isFinite(score)) return 0;
@@ -260,9 +275,12 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
     generationConfig: { responseMimeType: "application/json" },
   });
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  // Một lần đối chiếu không được giữ request quá lâu. Nếu model bị giới hạn,
+  // backend sẽ trả quyền xử lý về cho admin thay vì để đơn quay vô hạn.
+  const timeoutMs = getGeminiTimeoutMs();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -273,7 +291,7 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
       });
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("Gemini phản hồi quá thời gian 30 giây");
+        throw new Error(`Gemini phản hồi quá thời gian ${Math.round(timeoutMs / 1000)} giây`);
       }
       throw error;
     } finally {
@@ -292,10 +310,10 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
     const message = payload?.error?.message || `Gemini request failed (${response.status})`;
     const retryable = response.status === 429 || response.status === 500
       || response.status === 503 || response.status === 504;
-    if (!retryable || attempt === 2) {
+    if (!retryable || attempt === 1) {
       throw new Error(message);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    await new Promise((resolve) => setTimeout(resolve, 750));
   }
   throw new Error("Gemini matching retry limit reached");
 }
@@ -356,12 +374,24 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
 
   // Nếu vẫn chưa xác định được và cần phân tích hình ảnh/mô tả chuyên sâu -> Gọi Gemini
   if (!result) {
+    const failureKey = getMatchFailureKey(reportId, foundItemId);
+    const lastFailureAt = recentMatchFailures.get(failureKey) || 0;
+    if (Date.now() - lastFailureAt < MATCH_FAILURE_COOLDOWN_MS) return;
     try {
+      await logAudit(null, "LOST_ITEM_MATCH_STARTED", {
+        lost_report_id: reportId,
+        found_item_id: foundItemId,
+        model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
+        report_has_image: Array.isArray(reportData.image_object_keys) && reportData.image_object_keys.length > 0,
+        item_has_image: Array.isArray(itemData.image_object_keys) && itemData.image_object_keys.length > 0,
+      });
       result = await askGemini(reportData, itemData);
       provider = "gemini";
       model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+      recentMatchFailures.delete(failureKey);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown matching error";
+      recentMatchFailures.set(failureKey, Date.now());
       await logAudit(null, "LOST_ITEM_MATCH_FAILED", {
         lost_report_id: reportId,
         found_item_id: foundItemId,
@@ -501,6 +531,15 @@ export async function matchLostReportAgainstFoundItems(reportId: number): Promis
   for (const item of items.rows) {
     await matchLostReportWithFoundItem(reportId, Number(item.id));
   }
+
+  // Do not leave the UI spinning forever when Gemini is unavailable.
+  // Pending reports are retried by the normal scanner after the cooldown.
+  await pool.query(
+    `UPDATE lost_reports
+     SET status = 'pending', updated_at = now()
+     WHERE id = $1 AND status = 'searching'`,
+    [reportId],
+  );
 }
 
 export async function scanOpenLostReports(): Promise<void> {

@@ -40,6 +40,7 @@ export const AdminReportsView: React.FC = () => {
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportMatches, setReportMatches] = useState<any[]>([]);
+  const [aiLogs, setAiLogs] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [confirmingMatchId, setConfirmingMatchId] = useState<number | null>(null);
 
@@ -64,7 +65,9 @@ export const AdminReportsView: React.FC = () => {
   const fetchLostReports = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/lost-reports`);
+      const res = await fetch(`${API_BASE}/lost-reports`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const data = await res.json();
       if (data.success) {
         setLostReports(data.data || []);
@@ -192,15 +195,22 @@ export const AdminReportsView: React.FC = () => {
     if (!token) return;
     setSelectedReport(report);
     setReportMatches([]);
+    setAiLogs([]);
     setMatchModalOpen(true);
     setLoadingMatches(true);
     try {
-      const res = await fetch(`${API_BASE}/lost-reports/${report.id}/matches`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const [res, logsRes] = await Promise.all([
+        fetch(`${API_BASE}/lost-reports/${report.id}/matches`, { headers }),
+        fetch(`${API_BASE}/lost-reports/${report.id}/ai-logs`, { headers }),
+      ]);
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Không thể tải kết quả AI');
       setReportMatches(data.data || []);
+      if (logsRes.ok) {
+        const logsData = await logsRes.json();
+        if (logsData.success) setAiLogs(logsData.data || []);
+      }
     } catch (error: any) {
       message.error(error.message || 'Không thể tải kết quả AI');
     } finally {
@@ -591,6 +601,50 @@ export const AdminReportsView: React.FC = () => {
         footer={null}
         width={620}
       >
+        {selectedReport?.image_urls?.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>Ảnh món đồ báo mất</Text>
+            <Image.PreviewGroup>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {selectedReport.image_urls.map((imageUrl: string, index: number) => (
+                  <Image
+                    key={`report-image-${index}`}
+                    src={imageUrl}
+                    width={96}
+                    height={82}
+                    preview
+                    style={{ objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }}
+                  />
+                ))}
+              </div>
+            </Image.PreviewGroup>
+          </div>
+        )}
+        <div style={{ marginBottom: 14 }}>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>Log đối chiếu AI</Text>
+          {aiLogs.length === 0 ? (
+            <Text type="secondary" style={{ fontSize: 12 }}>Chưa có log. Đang chờ backend ghi nhận lần đối chiếu.</Text>
+          ) : (
+            <div style={{ maxHeight: 180, overflowY: 'auto', background: '#f8fafc', borderRadius: 8, padding: 8 }}>
+              {aiLogs.map((log) => {
+                const details = log.details || {};
+                const isFailed = log.action === 'LOST_ITEM_MATCH_FAILED';
+                const label = isFailed ? 'Lỗi' : log.action === 'LOST_ITEM_MATCH_STARTED' ? 'Đang xử lý' : log.action === 'LOST_ITEM_MATCHED' ? 'Đã đối chiếu' : 'Đã thông báo';
+                return (
+                  <div key={log.id} style={{ padding: '6px 4px', borderBottom: '1px solid #e2e8f0', fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <Tag color={isFailed ? 'error' : log.action === 'LOST_ITEM_MATCH_STARTED' ? 'warning' : 'processing'}>{label}</Tag>
+                      <Text type="secondary">{new Date(log.created_at).toLocaleString('vi-VN')}</Text>
+                    </div>
+                    <div style={{ marginTop: 4, color: '#475569' }}>
+                      Món #{details.found_item_id || '—'}{details.error ? `: ${details.error}` : details.score !== undefined ? ` · Điểm ${Math.round(Number(details.score) * 100)}%` : details.model ? ` · Model ${details.model}` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         {loadingMatches ? (
           <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
         ) : reportMatches.length === 0 ? (
