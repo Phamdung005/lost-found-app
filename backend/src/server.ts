@@ -170,7 +170,7 @@ app.post("/api/lost-reports/:id/confirm-match", authenticateToken, requireAdmin,
        FROM found_items f
        LEFT JOIN locker_slots s ON (s.id = f.slot_id OR s.id = f.locker_slot_id)
        LEFT JOIN lockers l ON s.locker_id = l.id
-       WHERE f.id = $1 FOR UPDATE`,
+       WHERE f.id = $1 FOR UPDATE OF f`,
       [foundItemId],
     );
 
