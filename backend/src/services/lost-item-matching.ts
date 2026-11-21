@@ -261,11 +261,24 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
   });
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: requestBody,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Gemini phản hồi quá thời gian 15 giây");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     const payload = await response.json().catch(() => null) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       error?: { message?: string };
