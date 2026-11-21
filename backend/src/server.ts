@@ -234,7 +234,8 @@ app.post("/api/lost-reports/:id/confirm-match", authenticateToken, requireAdmin,
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     console.error("Confirm lost report match failed:", error);
-    res.status(500).json({ success: false, message: "Không thể xác nhận món đồ" });
+    const detail = error instanceof Error ? error.message : "unknown database error";
+    res.status(500).json({ success: false, message: `Không thể xác nhận món đồ: ${detail}` });
   } finally {
     client.release();
   }
