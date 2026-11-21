@@ -424,7 +424,9 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
   }
 
   const threshold = Number(process.env.GEMINI_MATCH_THRESHOLD || "0.78");
-  const matchStatus = result.score >= threshold ? "notified" : "reviewed";
+  // AI/heuristic chỉ tạo ứng viên. Chỉ admin xác nhận mới được đổi báo mất
+  // sang found và gửi mã đồ cho người dùng.
+  const matchStatus = "reviewed";
   if (existing.rows.length > 0) {
     await pool.query(
       `UPDATE lost_report_matches
@@ -452,23 +454,6 @@ export async function matchLostReportWithFoundItem(reportId: number, foundItemId
     rationale: result.rationale,
   });
 
-  if (result.score >= threshold && row.report_user_id && existing.rows[0]?.status !== "notified") {
-    await pool.query(
-      "UPDATE lost_reports SET status = 'found', updated_at = now() WHERE id = $1 AND status IN ('searching', 'pending')",
-      [reportId],
-    );
-    await createNotification({
-      userId: row.report_user_id,
-      title: "🔎 Có món đồ tương tự báo mất của bạn",
-      message: `Hệ thống tìm thấy món đồ có khả năng trùng với "${row.report_item_name}" (mã ${row.tracking_code}). Vui lòng kiểm tra và gửi yêu cầu nhận đồ nếu đúng.`,
-      type: "success",
-    });
-    await logAudit(null, "LOST_ITEM_MATCH_NOTIFIED", {
-      lost_report_id: reportId,
-      found_item_id: foundItemId,
-      user_id: row.report_user_id,
-    });
-  }
 }
 
 export async function matchFoundItemAgainstOpenReports(foundItemId: number): Promise<void> {

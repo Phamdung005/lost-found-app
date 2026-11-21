@@ -714,7 +714,7 @@ export const AdminReportsView: React.FC = () => {
                   block
                   size="small"
                   loading={confirmingMatchId === match.found_item_id}
-                  disabled={match.found_item_status === 'returned' || selectedReport.status === 'found'}
+                  disabled={match.found_item_status === 'returned'}
                   onClick={() => void handleConfirmMatch(match)}
                   style={{ marginTop: 10, borderRadius: 7 }}
                 >
