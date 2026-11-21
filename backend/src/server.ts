@@ -137,10 +137,10 @@ app.get("/api/lost-reports/:id/ai-logs", authenticateToken, requireAdmin, async 
       `SELECT id, action, details, created_at
        FROM audit_logs
        WHERE action IN ('LOST_ITEM_MATCH_STARTED', 'LOST_ITEM_MATCH_FAILED', 'LOST_ITEM_MATCHED', 'LOST_ITEM_MATCH_NOTIFIED')
-         AND (details->>'lost_report_id')::int = $1
+         AND details->>'lost_report_id' = $1
        ORDER BY created_at DESC
        LIMIT 50`,
-      [reportId],
+      [String(reportId)],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -529,7 +529,7 @@ app.get("/api/lost-reports", async (req, res) => {
       SELECT lr.id, lr.item_name, lr.category, lr.description, lr.lost_location,
              lr.lost_at, lr.reporter_contact, lr.status, lr.user_id, lr.created_at,
              u.full_name AS reporter_name, u.email AS reporter_email, u.phone AS reporter_phone,
-             lr.image_object_keys,
+             lr.image_object_keys, lr.image_object_key,
              COUNT(lrm.id)::int AS match_count,
              MAX(lrm.score) AS best_match_score
       FROM lost_reports lr
@@ -553,11 +553,19 @@ app.get("/api/lost-reports", async (req, res) => {
 
     const canViewImages = isAdminRequest(req);
     const result = await pool.query(query, params);
-    const reports = await Promise.all(result.rows.map(async (report) => ({
-      ...report,
-      image_object_keys: undefined,
-      image_urls: canViewImages ? await createObjectReadUrls(report.image_object_keys) : [],
-    })));
+    const reports = await Promise.all(result.rows.map(async (report) => {
+      const imageKeys = Array.isArray(report.image_object_keys) && report.image_object_keys.length > 0
+        ? report.image_object_keys
+        : report.image_object_key
+          ? [report.image_object_key]
+          : [];
+      return {
+        ...report,
+        image_object_keys: undefined,
+        image_object_key: undefined,
+        image_urls: canViewImages ? await createObjectReadUrls(imageKeys) : [],
+      };
+    }));
     res.json({ success: true, data: reports });
   } catch (error) {
     console.error("Get lost reports failed:", error);

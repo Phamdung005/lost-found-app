@@ -94,6 +94,32 @@ export const AdminReportsView: React.FC = () => {
     }
   }, [tab]);
 
+  // Cập nhật popup trong lúc backend vẫn đang đối chiếu, không cần đóng/mở lại.
+  useEffect(() => {
+    if (!matchModalOpen || !selectedReport || !token) return undefined;
+    const refreshAiData = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const [logsRes, matchesRes] = await Promise.all([
+          fetch(`${API_BASE}/lost-reports/${selectedReport.id}/ai-logs`, { headers }),
+          fetch(`${API_BASE}/lost-reports/${selectedReport.id}/matches`, { headers }),
+        ]);
+        if (logsRes.ok) {
+          const logsData = await logsRes.json();
+          if (logsData.success) setAiLogs(logsData.data || []);
+        }
+        if (matchesRes.ok) {
+          const matchesData = await matchesRes.json();
+          if (matchesData.success) setReportMatches(matchesData.data || []);
+        }
+      } catch (error) {
+        console.warn('Không thể cập nhật log AI:', error);
+      }
+    };
+    const timer = window.setInterval(() => { void refreshAiData(); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [matchModalOpen, selectedReport, token]);
+
   const handleApprove = async (claimId: number) => {
     setProcessingAction(true);
     try {

@@ -308,10 +308,11 @@ async function askGemini(report: Record<string, unknown>, item: Record<string, u
     }
 
     const message = payload?.error?.message || `Gemini request failed (${response.status})`;
+    const detailedMessage = `Model ${config.model} HTTP ${response.status}: ${message}`;
     const retryable = response.status === 429 || response.status === 500
       || response.status === 503 || response.status === 504;
     if (!retryable || attempt === 1) {
-      throw new Error(message);
+      throw new Error(detailedMessage);
     }
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
