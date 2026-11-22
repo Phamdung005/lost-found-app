@@ -34,7 +34,7 @@ export async function closeWorkflowsForReturnedItem(
   await client.query(
     `UPDATE lost_reports
      SET status = 'closed', updated_at = now()
-     WHERE status IN ('searching', 'pending')
+     WHERE status IN ('searching', 'pending', 'found')
        AND id IN (
          SELECT lost_report_id FROM lost_report_matches WHERE found_item_id = $1
        )`,

@@ -324,8 +324,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <Text strong>{report.item_name}</Text>
-                  <Tag color={report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : report.status === 'pending' ? 'warning' : 'processing'}>
-                    {report.status === 'found' ? 'Đã tìm thấy ứng viên' : report.status === 'closed' ? 'Đã đóng' : report.status === 'pending' ? 'Đang chờ món phù hợp' : 'Đang theo dõi'}
+                  <Tag color={report.item_returned ? 'default' : report.status === 'found' ? 'success' : report.status === 'closed' ? 'default' : report.status === 'pending' ? 'warning' : 'processing'}>
+                    {report.item_returned ? 'Đã nhận đồ' : report.status === 'found' ? 'Đã tìm thấy ứng viên' : report.status === 'closed' ? 'Đã đóng' : report.status === 'pending' ? 'Đang chờ món phù hợp' : 'Đang theo dõi'}
                   </Tag>
                 </div>
                 <div style={{ color: '#64748b', fontSize: 12, marginTop: 5 }}>

@@ -598,9 +598,11 @@ app.get("/api/lost-reports/my", authenticateToken, async (req, res) => {
               lr.image_object_keys,
               COUNT(lrm.id)::int AS match_count,
               MAX(lrm.score) AS best_match_score,
-              MAX(lrm.created_at) AS last_match_at
+              MAX(lrm.created_at) AS last_match_at,
+              COALESCE(BOOL_OR(fi.status = 'returned'), false) AS item_returned
        FROM lost_reports lr
        LEFT JOIN lost_report_matches lrm ON lrm.lost_report_id = lr.id
+       LEFT JOIN found_items fi ON fi.id = lrm.found_item_id
        WHERE lr.user_id = $1
        GROUP BY lr.id
        ORDER BY lr.created_at DESC`,
