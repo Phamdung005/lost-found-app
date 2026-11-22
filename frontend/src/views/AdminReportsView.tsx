@@ -41,6 +41,9 @@ export const AdminReportsView: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportMatches, setReportMatches] = useState<any[]>([]);
   const [aiLogs, setAiLogs] = useState<any[]>([]);
+  const [availableFoundItems, setAvailableFoundItems] = useState<any[]>([]);
+  const [availableItemSearch, setAvailableItemSearch] = useState('');
+  const [loadingAvailableItems, setLoadingAvailableItems] = useState(false);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [confirmingMatchId, setConfirmingMatchId] = useState<number | null>(null);
 
@@ -222,13 +225,17 @@ export const AdminReportsView: React.FC = () => {
     setSelectedReport(report);
     setReportMatches([]);
     setAiLogs([]);
+    setAvailableFoundItems([]);
+    setAvailableItemSearch('');
     setMatchModalOpen(true);
     setLoadingMatches(true);
+    setLoadingAvailableItems(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [res, logsRes] = await Promise.all([
+      const [res, logsRes, itemsRes] = await Promise.all([
         fetch(`${API_BASE}/lost-reports/${report.id}/matches`, { headers }),
         fetch(`${API_BASE}/lost-reports/${report.id}/ai-logs`, { headers }),
+        fetch(`${API_BASE}/found-items?status=all`, { headers }),
       ]);
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Không thể tải kết quả AI');
@@ -237,21 +244,32 @@ export const AdminReportsView: React.FC = () => {
         const logsData = await logsRes.json();
         if (logsData.success) setAiLogs(logsData.data || []);
       }
+      if (itemsRes.ok) {
+        const itemsData = await itemsRes.json();
+        if (itemsData.success) {
+          setAvailableFoundItems((itemsData.data || []).filter((item: any) =>
+            ['in_locker', 'stored', 'archived'].includes(item.status)
+          ));
+        }
+      }
     } catch (error: any) {
       message.error(error.message || 'Không thể tải kết quả AI');
     } finally {
       setLoadingMatches(false);
+      setLoadingAvailableItems(false);
     }
   };
 
   const handleConfirmMatch = async (match: any) => {
     if (!selectedReport || !token) return;
-    setConfirmingMatchId(match.found_item_id);
+    const foundItemId = Number(match.found_item_id ?? match.id);
+    if (!Number.isInteger(foundItemId) || foundItemId <= 0) return;
+    setConfirmingMatchId(foundItemId);
     try {
       const res = await fetch(`${API_BASE}/lost-reports/${selectedReport.id}/confirm-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ found_item_id: match.found_item_id }),
+        body: JSON.stringify({ found_item_id: foundItemId }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Không thể xác nhận món đồ');
@@ -724,6 +742,68 @@ export const AdminReportsView: React.FC = () => {
             ))}
           </div>
         )}
+        <div style={{ marginTop: 18, borderTop: '1px solid #e2e8f0', paddingTop: 14 }}>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>
+            Chọn thủ công món đang lưu trong tủ
+          </Text>
+          <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
+            Dùng khi AI không có ứng viên hoặc cần xác nhận một món khác. Mã theo dõi sẽ được lấy tự động.
+          </Text>
+          <Input.Search
+            allowClear
+            placeholder="Tìm theo tên món, mã theo dõi hoặc địa điểm"
+            value={availableItemSearch}
+            onChange={(event) => setAvailableItemSearch(event.target.value)}
+            style={{ marginBottom: 10 }}
+          />
+          {loadingAvailableItems ? (
+            <div style={{ textAlign: 'center', padding: 16 }}><Spin size="small" /></div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+              {availableFoundItems
+                .filter((item) => {
+                  const query = availableItemSearch.trim().toLowerCase();
+                  if (!query) return true;
+                  return [item.item_name, item.tracking_code, item.found_location, item.locker_code, item.slot_code]
+                    .filter(Boolean)
+                    .some((value) => String(value).toLowerCase().includes(query));
+                })
+                .slice(0, 30)
+                .map((item) => {
+                  const itemImage = item.image_urls?.[0] || item.image_url;
+                  return (
+                    <div key={`manual-item-${item.id}`} className="card-clean" style={{ margin: 0, padding: 10 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        {itemImage ? (
+                          <Image src={itemImage} width={58} height={52} preview style={{ objectFit: 'cover', borderRadius: 6 }} />
+                        ) : (
+                          <div style={{ width: 58, height: 52, borderRadius: 6, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 11 }}>Không ảnh</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Text strong style={{ display: 'block' }}>{item.item_name}</Text>
+                          <div style={{ fontSize: 12, color: '#475569' }}>Mã: <strong>{item.tracking_code || `#${item.id}`}</strong></div>
+                          <div style={{ fontSize: 12, color: '#64748b' }}>{item.locker_code || 'Kho'}{item.slot_code ? ` · Ngăn ${item.slot_code}` : ''} · {item.found_location}</div>
+                        </div>
+                        <Button
+                          type="primary"
+                          size="small"
+                          loading={confirmingMatchId === Number(item.id)}
+                          onClick={() => void handleConfirmMatch(item)}
+                        >
+                          Chọn
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              {!availableFoundItems.some((item) => {
+                const query = availableItemSearch.trim().toLowerCase();
+                return !query || [item.item_name, item.tracking_code, item.found_location, item.locker_code, item.slot_code]
+                  .filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+              }) && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có món phù hợp đang lưu trong tủ." />}
+            </div>
+          )}
+        </div>
       </Modal>
 
       {/* Reject Modal */}
