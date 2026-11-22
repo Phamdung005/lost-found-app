@@ -93,7 +93,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             return report;
           }
         }));
-        setLostReports(reportsWithMatches);
+        // User only needs active lost reports; completed/returned reports remain
+        // available to admins but should not stay in the user's active list.
+        setLostReports(reportsWithMatches.filter((report: any) => !report.item_returned && report.status !== 'closed'));
       }
     } catch (err) {
       console.error('Không thể tải đơn báo mất:', err);
