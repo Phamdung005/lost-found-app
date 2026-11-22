@@ -36,7 +36,9 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setLostReports((data.data || []).filter((report: any) => report.status !== 'closed').slice(0, 4));
+        setLostReports((data.data || [])
+          .filter((report: any) => report.status !== 'closed' && !report.item_returned)
+          .slice(0, 4));
       }
       const claimsRes = await fetch(`${API_BASE}/claims/my`, {
         headers: { Authorization: 'Bearer ' + token },
