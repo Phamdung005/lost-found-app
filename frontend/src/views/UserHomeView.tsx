@@ -43,7 +43,7 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
       });
       const claimsData = await claimsRes.json();
       if (claimsData.success) {
-        setClaims((claimsData.data || []).filter((claim: any) => ['pending', 'approved'].includes(claim.status)).slice(0, 4));
+        setClaims((claimsData.data || []).filter((claim: any) => ['pending', 'approved', 'completed'].includes(claim.status)).slice(0, 4));
       }
     } catch (err) {
       console.error('Không thể tải đơn báo mất:', err);
@@ -206,8 +206,8 @@ export const UserHomeView: React.FC<UserHomeViewProps> = ({
                     <Text type="secondary" style={{ fontSize: 12 }}>Yêu cầu nhận đồ · {new Date(claim.created_at).toLocaleDateString('vi-VN')}</Text>
                   </div>
                 </div>
-                <Tag color={claim.status === 'approved' ? 'success' : 'processing'} style={{ margin: 0, borderRadius: 6 }}>
-                  {claim.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'}
+                <Tag color={claim.status === 'completed' ? 'default' : claim.status === 'approved' ? 'success' : 'processing'} style={{ margin: 0, borderRadius: 6 }}>
+                  {claim.status === 'completed' ? 'Đã nhận đồ' : claim.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'}
                 </Tag>
               </div>
             ))}
